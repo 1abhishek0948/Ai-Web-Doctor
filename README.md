@@ -384,4 +384,7 @@ deterministic-first design principle, and make sure `python manage.py test` pass
 
 ## License
 
-[MIT](LICENSE) © YOUR_NAME — replace with the actual copyright holder before publishing.
+[MIT](LICENSE) ©
+Abhishek Thakur 
+https://www.linkedin.com/in/abhishek0948/
+https://github.com/1abhishek0948/
