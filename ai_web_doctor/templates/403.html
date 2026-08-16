@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Forbidden — AI Web Doctor{% endblock %}
+{% block meta_robots %}noindex, follow{% endblock %}
+{% block content %}
+  {% include "partials/error_page.html" with status="403" title="You don't have access" message="You don't have permission to view this page. If you believe this is a mistake, log in with an account that can." %}
+{% endblock %}

@@ -1,0 +1,104 @@
+{% load static %}
+{% load scans_tags %}
+<div id="verify-result" x-data="{ mode: 'side', pos: 50 }">
+  {% if verification.error_message %}
+    <div class="rounded-xl border border-red-200 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950">
+      <p class="flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
+        {% include "partials/icon.html" with name="alert-triangle" class="mt-0.5 h-4 w-4 shrink-0" %}
+        {{ verification.error_message }}
+      </p>
+      <p class="mt-1 text-xs text-red-600 dark:text-red-400">
+        Verification ran at {{ issue.viewport_width }} &times; {{ issue.viewport_height }}.
+      </p>
+    </div>
+  {% else %}
+    {% if verification.status == "verified" %}
+      <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900 dark:bg-emerald-950">
+        <div class="flex items-center gap-2">
+          {% include "partials/icon.html" with name="check" class="h-5 w-5 text-emerald-600 dark:text-emerald-400" %}
+          <h3 class="text-lg font-bold text-emerald-800 dark:text-emerald-300">Fix verified</h3>
+        </div>
+        {% if verification.old_value %}
+          <p class="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
+            {{ verification.old_value }} <span class="mx-1">→</span> {{ verification.new_value }}
+          </p>
+        {% endif %}
+        {% if verification.message %}
+          <p class="mt-1 text-sm text-emerald-700 dark:text-emerald-400">{{ verification.message }}</p>
+        {% endif %}
+      </div>
+    {% elif verification.status == "improved" %}
+      <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950">
+        <div class="flex items-center gap-2">
+          {% include "partials/icon.html" with name="activity" class="h-5 w-5 text-amber-600 dark:text-amber-400" %}
+          <h3 class="text-lg font-bold text-amber-800 dark:text-amber-300">Issue improved</h3>
+        </div>
+        <p class="mt-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
+          {{ verification.old_value }} <span class="mx-1">→</span> {{ verification.new_value }}
+        </p>
+        <p class="mt-1 text-sm text-amber-700 dark:text-amber-400">{{ verification.message }}</p>
+        <p class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+          {% include "partials/icon.html" with name="alert-triangle" class="h-3.5 w-3.5" %}
+          Still failing
+        </p>
+      </div>
+    {% else %}
+      <div class="rounded-xl border border-red-200 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950">
+        <div class="flex items-center gap-2">
+          {% include "partials/icon.html" with name="alert-triangle" class="h-5 w-5 text-red-600 dark:text-red-400" %}
+          <h3 class="text-lg font-bold text-red-800 dark:text-red-300">Issue still detected</h3>
+        </div>
+        {% if verification.old_value %}
+          <p class="mt-2 text-sm text-red-800 dark:text-red-300">{{ verification.old_value }}</p>
+        {% endif %}
+        {% if verification.message %}
+          <p class="mt-1 text-sm text-red-700 dark:text-red-400">{{ verification.message }}</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if verification.screenshot_before and verification.screenshot_after %}
+      <div class="mt-5">
+        <div class="flex items-center justify-between gap-3">
+          <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Before / After</h4>
+          <div class="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">
+            <button type="button" @click="mode = 'side'" class="rounded-md px-3 py-1 text-xs font-medium" :class="mode === 'side' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 dark:text-slate-400'">Side by side</button>
+            <button type="button" @click="mode = 'slider'" class="rounded-md px-3 py-1 text-xs font-medium" :class="mode === 'slider' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-500 dark:text-slate-400'">Slider</button>
+          </div>
+        </div>
+
+        <div x-show="mode === 'side'" class="mt-3 grid gap-3 sm:grid-cols-2">
+          <figure>
+            <div class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+              <img src="{% get_media_prefix %}{{ verification.screenshot_before }}" alt="Before: the site at the time the issue was detected" class="w-full bg-slate-100 dark:bg-slate-800">
+            </div>
+            <figcaption class="mt-1 text-center text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Before</figcaption>
+          </figure>
+          <figure>
+            <div class="overflow-hidden rounded-xl border border-emerald-200 dark:border-emerald-900">
+              <img src="{% get_media_prefix %}{{ verification.screenshot_after }}" alt="After: the site when verified" class="w-full bg-slate-100 dark:bg-slate-800">
+            </div>
+            <figcaption class="mt-1 text-center text-xs font-semibold uppercase tracking-wide text-emerald-500 dark:text-emerald-400">After</figcaption>
+          </figure>
+        </div>
+
+        <div x-show="mode === 'slider'" class="mt-3">
+          <div class="relative select-none overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+            <img src="{% get_media_prefix %}{{ verification.screenshot_after }}" alt="After" class="w-full bg-slate-100 dark:bg-slate-800" draggable="false">
+            <img src="{% get_media_prefix %}{{ verification.screenshot_before }}" alt="Before" class="pointer-events-none absolute inset-0 w-full bg-slate-100 dark:bg-slate-800" :style="'clip-path: inset(0 ' + (100 - pos) + '% 0 0)'" draggable="false">
+            <div class="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow" :style="'left: ' + pos + '%'">
+              <span class="absolute -left-2.5 -top-3 text-[10px] font-bold uppercase tracking-wide text-slate-500">Before</span>
+              <span class="absolute -right-6 -top-3 text-[10px] font-bold uppercase tracking-wide text-emerald-600">After</span>
+            </div>
+          </div>
+          <input type="range" min="0" max="100" value="50" x-model="pos" class="mt-3 w-full" aria-label="Before/after slider">
+          <p class="mt-1 text-center text-xs text-slate-400 dark:text-slate-500">Drag to compare</p>
+        </div>
+      </div>
+    {% endif %}
+
+    <p class="mt-4 text-xs text-slate-400 dark:text-slate-500">
+      Verified automatically with Playwright at {{ issue.viewport_width }} &times; {{ issue.viewport_height }} on {{ verification.created_at|date:"M j, Y H:i" }}.
+    </p>
+  {% endif %}
+</div>

@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Page not found — AI Web Doctor{% endblock %}
+{% block meta_robots %}noindex, follow{% endblock %}
+{% block content %}
+  {% include "partials/error_page.html" with status="404" title="Page not found" message="The page you were looking for doesn't exist or has been moved." %}
+{% endblock %}

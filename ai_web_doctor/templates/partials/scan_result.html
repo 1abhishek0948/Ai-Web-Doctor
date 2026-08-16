@@ -1,0 +1,65 @@
+{% load static %}
+{% load scans_tags %}
+<div id="scan-progress">
+  <div class="flex items-center gap-2">
+    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900">
+      {% include "partials/icon.html" with name="check" class="h-4 w-4 text-emerald-600 dark:text-emerald-400" %}
+    </span>
+    <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Scan complete</h2>
+  </div>
+
+  {% if scan.status == "partial" %}
+    <p class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+      Some viewports could not be scanned. Results below are from the viewports that succeeded.
+    </p>
+  {% endif %}
+
+  <dl class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    {% for key, label in metric_labels %}
+      <div class="rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-800">
+        <dt class="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">{{ label }}</dt>
+        <dd class="mt-1 font-mono text-lg font-semibold text-slate-900 dark:text-slate-100">
+          {{ metrics|get_item:key|default:"—" }}
+        </dd>
+      </div>
+    {% endfor %}
+  </dl>
+
+  {% if metrics.overflow_px %}
+    <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950">
+      <p class="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
+        {% include "partials/icon.html" with name="shield" class="h-4 w-4" %}
+        Horizontal overflow detected
+      </p>
+      <p class="mt-1 text-sm text-amber-700 dark:text-amber-400">
+        The page is {{ metrics.overflow_px }}px wider than the {{ metrics.innerWidth }}px viewport.
+      </p>
+    </div>
+  {% else %}
+    <div class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900 dark:bg-emerald-950">
+      <p class="flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+        {% include "partials/icon.html" with name="check" class="h-4 w-4" %}
+        No horizontal overflow at {{ metrics.innerWidth }}px
+      </p>
+    </div>
+  {% endif %}
+
+  {% if screenshot %}
+    <div class="mt-6">
+      <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Screenshot — {{ screenshot.viewport_width }} &times; {{ screenshot.viewport_height }}</h3>
+      <div class="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+        <img src="{% get_media_prefix %}{{ screenshot.path }}" alt="Screenshot of the scanned site at {{ screenshot.viewport_width }}x{{ screenshot.viewport_height }}" class="w-full">
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="mt-6 flex flex-wrap gap-3">
+    <a href="{% url 'scans:scan-results' scan.pk %}" class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700">
+      {% include "partials/icon.html" with name="gauge" class="h-4 w-4" %}
+      View full report
+    </a>
+    <a href="{% url 'scans:scan-list' %}" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+      All scans
+    </a>
+  </div>
+</div>

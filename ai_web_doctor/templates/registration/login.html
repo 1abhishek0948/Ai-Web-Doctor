@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Log in — AI Web Doctor{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-md px-4 py-16">
+  <div class="rounded-2xl border border-slate-200 p-8 dark:border-slate-800">
+    <h1 class="text-xl font-bold text-slate-900 dark:text-slate-100">Log in</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Access your scan history and reports.</p>
+
+    {% if form.non_field_errors %}
+      <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <form method="post" class="mt-6 space-y-4">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <div>
+        <label for="id_username" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Username</label>
+        <input type="text" name="username" id="id_username" autofocus required
+               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+      </div>
+      <div>
+        <label for="id_password" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
+        <input type="password" name="password" id="id_password" required
+               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+      </div>
+      <button type="submit" class="w-full rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-brand-700">
+        Log in
+      </button>
+    </form>
+
+    <div class="mt-6 flex items-center justify-between text-sm">
+      <a href="{% url 'password_reset' %}" class="text-brand-600 hover:underline dark:text-brand-400">Forgot password?</a>
+      <a href="{% url 'register' %}" class="text-brand-600 hover:underline dark:text-brand-400">Create an account</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Bad request — AI Web Doctor{% endblock %}
+{% block meta_robots %}noindex, follow{% endblock %}
+{% block content %}
+  {% include "partials/error_page.html" with status="400" title="That request didn't look right" message="The browser sent a request the server could not understand. Go back and try again." %}
+{% endblock %}

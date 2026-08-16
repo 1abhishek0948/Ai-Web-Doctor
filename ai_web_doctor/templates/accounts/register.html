@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Create an account — AI Web Doctor{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-md px-4 py-16">
+  <div class="rounded-2xl border border-slate-200 p-8 dark:border-slate-800">
+    <h1 class="text-xl font-bold text-slate-900 dark:text-slate-100">Create an account</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Sign up to save your scans and reports.</p>
+
+    {% if form.non_field_errors %}
+      <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <form method="post" class="mt-6 space-y-4">
+      {% csrf_token %}
+      {% for field in form %}
+        <div>
+          <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700 dark:text-slate-300">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}
+            <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">{{ field.help_text|safe }}</p>
+          {% endif %}
+          {% for error in field.errors %}
+            <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ error }}</p>
+          {% endfor %}
+        </div>
+      {% endfor %}
+      <button type="submit" class="w-full rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-brand-700">
+        Create account
+      </button>
+    </form>
+
+    <p class="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+      Already have an account?
+      <a href="{% url 'login' %}" class="text-brand-600 hover:underline dark:text-brand-400">Log in</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

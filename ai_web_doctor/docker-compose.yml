@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ai_web_doctor
+      POSTGRES_USER: ai_doctor
+      POSTGRES_PASSWORD: ai_doctor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_doctor -d ai_web_doctor"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+      SECRET_KEY: dev-secret-key-not-for-production
+      DEBUG: "True"
+      DATABASE_URL: postgres://ai_doctor:ai_doctor@db:5432/ai_web_doctor
+      REDIS_URL: redis://redis:6379/0
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      GEMINI_API_KEY: ""
+      GEMINI_MODEL: gemini-2.0-flash
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: >
+      sh -c "celery -A config.celery worker --loglevel=info"
+    volumes:
+      - .:/app
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+      SECRET_KEY: dev-secret-key-not-for-production
+      DEBUG: "True"
+      DATABASE_URL: postgres://ai_doctor:ai_doctor@db:5432/ai_web_doctor
+      REDIS_URL: redis://redis:6379/0
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      GEMINI_API_KEY: ""
+      GEMINI_MODEL: gemini-2.0-flash
+      CELERY_TASK_ALWAYS_EAGER: "False"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

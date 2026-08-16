@@ -1,0 +1,59 @@
+{% load static %}
+{% if scan.status == "completed" or scan.status == "partial" %}
+  {% include "partials/scan_result.html" with scan=scan %}
+{% elif scan.status == "failed" %}
+  <div id="scan-progress" class="rounded-xl border border-red-200 bg-red-50 p-6 dark:border-red-900 dark:bg-red-950">
+    <h2 class="flex items-center gap-2 text-lg font-semibold text-red-700 dark:text-red-300">
+      {% include "partials/icon.html" with name="x" class="h-5 w-5" %}
+      We couldn't finish this scan.
+    </h2>
+    <p class="mt-2 text-sm text-red-700 dark:text-red-300">
+      {{ scan.error_message|default:"An unexpected error occurred. Try again or scan a different URL." }}
+    </p>
+    <a href="{% url 'landing' %}" class="mt-4 inline-flex rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700">
+      Scan another URL
+    </a>
+  </div>
+{% else %}
+  <div id="scan-progress"
+       hx-get="{% url 'scans:scan-progress' scan.pk %}"
+       hx-trigger="load delay:800ms, every 2s"
+       hx-swap="outerHTML"
+       class="space-y-3">
+    <p class="text-sm font-medium text-slate-500 dark:text-slate-400">
+      Scanning <span class="font-mono text-slate-700 dark:text-slate-200">{{ scan.normalized_url|default:scan.url }}</span>
+    </p>
+    <div class="space-y-2">
+      {% for stage, label in stage_labels %}
+        {% if stage in done_stages %}
+          <div class="flex items-center gap-3 text-sm text-emerald-600 dark:text-emerald-400">
+            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900">
+              {% include "partials/icon.html" with name="check" class="h-3.5 w-3.5" %}
+            </span>
+            {{ label }}
+          </div>
+        {% elif stage == scan.progress_stage %}
+          <div class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-200">
+            <span class="inline-flex h-5 w-5 items-center justify-center">
+              <svg class="h-4 w-4 animate-spin text-brand-600 dark:text-brand-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+            </span>
+            {{ label }}
+          </div>
+        {% else %}
+          <div class="flex items-center gap-3 text-sm text-slate-400 dark:text-slate-500">
+            <span class="inline-flex h-5 w-5 items-center justify-center">
+              {% include "partials/icon.html" with name="circle" class="h-4 w-4" %}
+            </span>
+            {{ label }}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <p class="pt-2 text-xs text-slate-400 dark:text-slate-500">
+      This page refreshes automatically as the scan progresses.
+    </p>
+  </div>
+{% endif %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Signed out — AI Web Doctor{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-md px-4 py-16 text-center">
+  <h1 class="text-xl font-bold text-slate-900 dark:text-slate-100">You have been signed out</h1>
+  <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Thanks for using AI Web Doctor.</p>
+  <a href="{% url 'login' %}" class="mt-6 inline-flex rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-brand-700">
+    Log in again
+  </a>
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Too many requests — AI Web Doctor{% endblock %}
+{% block meta_robots %}noindex, follow{% endblock %}
+{% block content %}
+  {% include "partials/error_page.html" with status="429" title="You've reached today's scan limit" message="You have used all of your daily scans. Come back tomorrow, or log in for a higher limit." limit=limit %}
+{% endblock %}

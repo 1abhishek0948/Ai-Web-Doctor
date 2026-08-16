@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% load static %}
+{% load scans_tags %}
+
+{% block title %}{{ issue.title }} — AI Web Doctor{% endblock %}
+
+{% block json_ld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Home", "item": "{{ SITE_URL }}/"},
+    {"@type": "ListItem", "position": 2, "name": "Scans", "item": "{{ SITE_URL }}{% url 'scans:scan-list' %}"},
+    {"@type": "ListItem", "position": 3, "name": "Results", "item": "{{ SITE_URL }}{% url 'scans:scan-results' issue.scan.pk %}"},
+    {"@type": "ListItem", "position": 4, "name": "{{ issue.title }}", "item": "{{ SITE_URL }}{% url 'scans:issue-detail' issue.scan.pk issue.pk %}"}
+  ]
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-4xl px-4 py-10">
+  <nav class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+    <a href="{% url 'landing' %}" class="hover:text-slate-700 dark:hover:text-slate-200">Home</a>
+    <span class="mx-2">/</span>
+    <a href="{% url 'scans:scan-results' issue.scan.pk %}" class="hover:text-slate-700 dark:hover:text-slate-200">Results</a>
+    <span class="mx-2">/</span>
+    <span class="text-slate-700 dark:text-slate-200">Issue</span>
+  </nav>
+
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold {{ issue.severity|severity_badge }}">{{ issue.get_severity_display }}</span>
+          <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ issue.get_category_display }}</span>
+          <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ issue.source|source_label }}</span>
+          {% if issue.viewport_width %}
+            <span class="text-xs text-slate-400 dark:text-slate-500">{{ issue.viewport_width }} &times; {{ issue.viewport_height }}</span>
+          {% endif %}
+        </div>
+        <h1 class="mt-3 text-2xl font-bold text-slate-900 dark:text-slate-100">{{ issue.title }}</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Found on {{ issue.scan.normalized_url|default:issue.scan.url }}
+        </p>
+      </div>
+      <a href="{% url 'scans:scan-results' issue.scan.pk %}" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+        {% include "partials/icon.html" with name="arrow-left" class="h-4 w-4" %}
+        Back to results
+      </a>
+    </div>
+
+    {% if issue.description %}
+      <p class="mt-4 text-slate-700 dark:text-slate-300">{{ issue.description }}</p>
+    {% endif %}
+
+    {% if issue.ai_explanation %}
+      <div class="mt-6 rounded-xl border border-brand-200 bg-brand-50 p-5 dark:border-brand-900 dark:bg-brand-950">
+        <h2 class="flex items-center gap-2 text-sm font-semibold text-brand-800 dark:text-brand-300">
+          {% include "partials/icon.html" with name="cpu" class="h-4 w-4" %}
+          AI diagnosis
+        </h2>
+        <p class="mt-2 whitespace-pre-line text-sm text-brand-900 dark:text-brand-100">{{ issue.ai_explanation }}</p>
+        {% if issue.confidence > 0 %}
+          <p class="mt-2 text-xs text-brand-700 dark:text-brand-400">
+            Confidence {{ issue.confidence|floatformat:2 }}
+          </p>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="mt-6 grid gap-6 lg:grid-cols-2">
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Evidence</h2>
+      {% if evidence_rows %}
+        <dl class="mt-3 space-y-3">
+          {% for key, value in evidence_rows %}
+            <div>
+              <dt class="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">{{ key }}</dt>
+              <dd class="mt-0.5 break-words text-sm text-slate-700 dark:text-slate-300">{{ value }}</dd>
+            </div>
+          {% endfor %}
+        </dl>
+      {% else %}
+        <p class="mt-3 text-sm text-slate-400 dark:text-slate-500">No structured evidence recorded.</p>
+      {% endif %}
+
+      {% if issue.selector %}
+        <div class="mt-4">
+          <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Element</h3>
+          <p class="mt-1 font-mono text-xs text-slate-700 dark:text-slate-300">{{ issue.selector }}</p>
+        </div>
+      {% endif %}
+
+      {% if evidence_snippet %}
+        <div class="mt-4">
+          <h3 class="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Relevant markup</h3>
+          <pre class="mt-2 overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-100"><code>{{ evidence_snippet }}</code></pre>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Screenshot</h2>
+      <div class="mt-3 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+        {% if screenshot %}
+          <img src="{% get_media_prefix %}{{ screenshot.path }}" alt="Screenshot of the scanned site at {{ screenshot.viewport_width }}x{{ screenshot.viewport_height }}" class="w-full bg-slate-100 dark:bg-slate-800">
+          <p class="border-t border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            {{ screenshot.viewport_width }} &times; {{ screenshot.viewport_height }}
+          </p>
+        {% else %}
+          <p class="p-4 text-sm text-slate-400 dark:text-slate-500">No screenshot available.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex items-center gap-2">
+      {% include "partials/icon.html" with name="gauge" class="h-5 w-5 text-emerald-600 dark:text-emerald-400" %}
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Verify Fix</h2>
+    </div>
+    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+      Reload the website at this issue's viewport, re-run the same deterministic check,
+      and compare the measurable before/after result. No AI is asked whether the fix works.
+    </p>
+
+    <form hx-post="{% url 'scans:issue-verify' issue.scan.pk issue.pk %}"
+          hx-target="#verify-slot"
+          hx-swap="innerHTML"
+          hx-indicator="#verify-indicator"
+          hx-on::before-request="startVerifyLoading()"
+          class="mt-4">
+      {% csrf_token %}
+      <button type="submit" id="verify-fix-btn" class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700">
+        {% include "partials/icon.html" with name="check" class="h-4 w-4" %}
+        Verify Fix
+      </button>
+    </form>
+
+    <div id="verify-indicator" class="htmx-indicator mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+      <svg class="h-4 w-4 animate-spin text-emerald-600 dark:text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span id="verify-loading-label">Starting verification…</span>
+    </div>
+
+    <div id="verify-slot" class="mt-4"></div>
+  </div>
+
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex items-center gap-2">
+      {% include "partials/icon.html" with name="wrench" class="h-5 w-5 text-brand-600 dark:text-brand-400" %}
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Generate a suggested fix</h2>
+    </div>
+    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+      The AI writes a concrete code change for this issue using its diagnosis and the relevant markup.
+      The result is a <strong>suggestion only</strong> — AI Web Doctor never applies it to your site. A developer
+      reviews and applies the fix manually.
+    </p>
+
+    <form hx-post="{% url 'scans:issue-fix' issue.scan.pk issue.pk %}"
+          hx-target="#fix-slot"
+          hx-swap="innerHTML"
+          hx-indicator="#fix-indicator"
+          hx-on::before-request="startFixLoading()"
+          class="mt-4">
+      {% csrf_token %}
+      <button type="submit" id="generate-fix-btn" class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700">
+        {% include "partials/icon.html" with name="code" class="h-4 w-4" %}
+        Generate Fix
+      </button>
+    </form>
+
+    <div id="fix-indicator" class="htmx-indicator mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+      <svg class="h-4 w-4 animate-spin text-brand-600 dark:text-brand-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span id="fix-loading-label">Analyzing issue…</span>
+    </div>
+
+    <div id="fix-slot" class="mt-4"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var fixLoadingStarted = false;
+  function startFixLoading() {
+    if (fixLoadingStarted) return;
+    fixLoadingStarted = true;
+    var btn = document.getElementById("generate-fix-btn");
+    if (btn) btn.disabled = true;
+    var label = document.getElementById("fix-loading-label");
+    if (label) {
+      label.textContent = "Analyzing issue…";
+      setTimeout(function () {
+        if (label && label.textContent.indexOf("Generating") === -1) {
+          label.textContent = "Generating fix…";
+        }
+      }, 1200);
+    }
+  }
+  var verifySteps = [
+    "Starting verification…",
+    "Loading website…",
+    "Testing viewport…",
+    "Comparing results…"
+  ];
+  var verifyLoadingStarted = false;
+  function startVerifyLoading() {
+    if (verifyLoadingStarted) return;
+    verifyLoadingStarted = true;
+    var btn = document.getElementById("verify-fix-btn");
+    if (btn) btn.disabled = true;
+    var label = document.getElementById("verify-loading-label");
+    if (!label) return;
+    var step = 0;
+    label.textContent = verifySteps[0];
+    var timer = setInterval(function () {
+      step = Math.min(step + 1, verifySteps.length - 1);
+      if (label) label.textContent = verifySteps[step];
+    }, 1200);
+    document.body.addEventListener("htmx:afterRequest", function clearVerifyTimer(event) {
+      if (event.detail && event.detail.target && event.detail.target.id === "verify-slot") {
+        clearInterval(timer);
+        document.body.removeEventListener("htmx:afterRequest", clearVerifyTimer);
+      }
+    });
+  }
+  function copyFix(button) {
+    var el = document.getElementById("fix-code");
+    var text = el ? el.innerText : "";
+    if (navigator.clipboard && text) {
+      navigator.clipboard.writeText(text).then(function () {
+        var original = button.textContent;
+        button.textContent = "Copied!";
+        setTimeout(function () { button.textContent = original; }, 2000);
+      });
+    }
+  }
+  document.body.addEventListener("htmx:afterSwap", function (event) {
+    if (event.detail && event.detail.target && event.detail.target.id === "fix-slot") {
+      if (window.hljs) {
+        event.detail.target.querySelectorAll("pre code").forEach(function (el) {
+          hljs.highlightElement(el);
+        });
+      }
+    }
+  });
+</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+{% endblock %}

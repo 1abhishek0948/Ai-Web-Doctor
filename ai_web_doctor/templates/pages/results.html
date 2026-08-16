@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% load static %}
+{% load scans_tags %}
+
+{% block title %}Results — {{ scan.normalized_url|default:scan.url }}{% endblock %}
+
+{% block json_ld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Home", "item": "{{ SITE_URL }}/"},
+    {"@type": "ListItem", "position": 2, "name": "Scans", "item": "{{ SITE_URL }}{% url 'scans:scan-list' %}"},
+    {"@type": "ListItem", "position": 3, "name": "Results", "item": "{{ SITE_URL }}{% url 'scans:scan-results' scan.pk %}"}
+  ]
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-6xl px-4 py-10">
+  <nav class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+    <a href="{% url 'landing' %}" class="hover:text-slate-700 dark:hover:text-slate-200">Home</a>
+    <span class="mx-2">/</span>
+    <a href="{% url 'scans:scan-list' %}" class="hover:text-slate-700 dark:hover:text-slate-200">Scans</a>
+    <span class="mx-2">/</span>
+    <span class="text-slate-700 dark:text-slate-200">Results</span>
+  </nav>
+
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="min-w-0">
+        <h1 class="truncate text-xl font-bold text-slate-900 dark:text-slate-100">
+          {{ scan.normalized_url|default:scan.url }}
+        </h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Scanned {{ scan.created_at|timesince }} ago across 9 viewports, mobile to desktop.
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="{% url 'scans:scan-detail' scan.pk %}" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+          {% include "partials/icon.html" with name="arrow-left" class="h-4 w-4" %}
+          Scan status
+        </a>
+        <a href="{% url 'landing' %}#scan" class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700">
+          {% include "partials/icon.html" with name="scan" class="h-4 w-4" %}
+          Scan another
+        </a>
+      </div>
+    </div>
+
+    {% if scan.ai_status == "running" %}
+      <div class="mt-6 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+        <svg class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        AI visual analysis is running. Visual categories will update when it finishes.
+      </div>
+    {% elif scan.ai_status != "pending" and scan.ai_status != "completed" %}
+      <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+        <p class="flex items-center gap-2 font-semibold">
+          {% include "partials/icon.html" with name="cpu" class="h-4 w-4" %}
+          AI visual analysis: {{ scan.ai_status|ai_status_label }}
+        </p>
+        {% if ai_message %}
+          <p class="mt-1 text-amber-700 dark:text-amber-400">{{ ai_message }}</p>
+        {% endif %}
+      </div>
+    {% elif scan.ai_status == "pending" %}
+      <div class="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        AI visual analysis has not run for this scan.
+      </div>
+    {% endif %}
+
+    <div class="mt-6 grid gap-6 lg:grid-cols-3">
+      <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+        <p class="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">UI Health</p>
+        {% if score_summary.score is not None %}
+          <p class="mt-2 flex items-baseline gap-2">
+            <span class="text-4xl font-bold text-slate-900 dark:text-slate-100">{{ score_summary.score }}</span>
+            <span class="text-lg text-slate-500 dark:text-slate-400">/ 100</span>
+            <span class="ml-2 rounded-full px-2.5 py-0.5 text-xs font-semibold {{ score_summary.score|health_color }}">{{ score_summary.score|health_label }}</span>
+          </p>
+          <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <div class="h-full rounded-full bg-brand-600" style="width: {{ score_summary.score }}%"></div>
+          </div>
+          {% if not score_summary.full_coverage %}
+            <p class="mt-4 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              AI visual analysis did not run, so this score reflects only the
+              {{ score_summary.coverage_weight }} of {{ score_summary.total_weight }}
+              points of category weight that were actually analyzed. The score is
+              normalized to the analyzed weight, so a clean site can still reach 100.
+            </p>
+          {% endif %}
+
+          <details class="mt-4 rounded-lg border border-slate-200 dark:border-slate-800">
+            <summary class="cursor-pointer select-none px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+              How this score is computed
+            </summary>
+            <div class="border-t border-slate-200 px-3 py-3 dark:border-slate-800">
+              <p class="text-xs text-slate-500 dark:text-slate-400">
+                Each category group is worth up to its weight. Every defect deducts a
+                penalty (critical 12, high 6, medium 3, low 1, info 0). The same defect
+                found at several viewports counts once, at its highest severity. Groups
+                that were not analyzed do not affect the score.
+              </p>
+              <table class="mt-3 w-full text-xs">
+                <thead>
+                  <tr class="text-left text-slate-400 dark:text-slate-500">
+                    <th class="pb-1 font-medium">Group</th>
+                    <th class="pb-1 font-medium">Weight</th>
+                    <th class="pb-1 text-right font-medium">Defects</th>
+                    <th class="pb-1 text-right font-medium">Penalty</th>
+                    <th class="pb-1 text-right font-medium">Score</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-700 dark:text-slate-300">
+                  {% for group in score_summary.groups %}
+                    <tr class="border-t border-slate-100 dark:border-slate-800">
+                      <td class="py-1.5">
+                        <span class="font-medium">{{ group.label }}</span>
+                        {% if group.state != "analyzed" %}
+                          <span class="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">{{ group.state|analysis_state_label }}</span>
+                        {% endif %}
+                      </td>
+                      <td class="py-1.5">{{ group.weight }}</td>
+                      <td class="py-1.5 text-right">{{ group.root_count }}</td>
+                      <td class="py-1.5 text-right">{{ group.penalty }}</td>
+                      <td class="py-1.5 text-right font-semibold">
+                        {% if group.state != "not_analyzed" %}{{ group.raw_score }}{% else %}—{% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                  <tr class="border-t border-slate-200 font-semibold dark:border-slate-700">
+                    <td class="py-1.5">Total</td>
+                    <td class="py-1.5">{{ score_summary.total_weight }}</td>
+                    <td class="py-1.5 text-right">{{ score_summary.total_roots }}</td>
+                    <td class="py-1.5 text-right"></td>
+                    <td class="py-1.5 text-right">{{ score_summary.score }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+        {% else %}
+          <p class="mt-2 text-3xl font-bold text-slate-300 dark:text-slate-600">—</p>
+          <p class="mt-2 text-sm text-slate-400 dark:text-slate-500">No analysis has completed yet, so there is no score to show.</p>
+        {% endif %}
+      </div>
+
+      <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800 lg:col-span-2">
+        <p class="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Issues by severity</p>
+        <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {% for sev in severity_options %}
+            <a href="{% url 'scans:scan-results' scan.pk %}?severity={{ sev }}" class="rounded-lg border border-slate-200 px-3 py-2 text-center transition-colors hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 {% if selected_severity == sev %}ring-2 ring-brand-500{% endif %}">
+              <span class="block text-2xl font-bold text-slate-900 dark:text-slate-100">{{ severity_counts|get_item:sev }}</span>
+              <span class="mt-0.5 block text-xs font-medium capitalize text-slate-500 dark:text-slate-400">{{ sev }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="mt-10 text-lg font-semibold text-slate-900 dark:text-slate-100">Diagnostics</h2>
+  <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    {% for stat in score_summary.category_states %}
+      <a href="{% url 'scans:scan-results' scan.pk %}?category={{ stat.key }}" class="rounded-xl border border-slate-200 p-4 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900 {% if selected_category == stat.key %}ring-2 ring-brand-500{% endif %}">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-300">{{ stat.label }}</span>
+          {% if stat.state == "analyzed" and stat.count == 0 %}
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+              {% include "partials/icon.html" with name="check" class="h-3 w-3" %}
+              Analyzed
+            </span>
+          {% elif stat.state == "not_analyzed" %}
+            <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400" title="{{ stat.reason }}">
+              {% include "partials/icon.html" with name="cpu" class="h-3 w-3" %}
+              Not analyzed
+            </span>
+          {% elif stat.state == "failed" %}
+            <span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700 dark:bg-red-900 dark:text-red-300" title="{{ stat.reason }}">
+              {% include "partials/icon.html" with name="x" class="h-3 w-3" %}
+              Failed
+            </span>
+          {% elif stat.state == "partial" %}
+            <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900 dark:text-amber-300" title="{{ stat.reason }}">
+              {% include "partials/icon.html" with name="shield" class="h-3 w-3" %}
+              Partial
+            </span>
+          {% endif %}
+        </div>
+        {% if stat.state == "not_analyzed" or stat.state == "failed" %}
+          <p class="mt-2 text-2xl font-bold text-slate-300 dark:text-slate-600">—</p>
+        {% else %}
+          <p class="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{{ stat.count }}</p>
+        {% endif %}
+        <p class="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          {{ stat.group_label }} &middot; {{ stat.weight }}% of score
+        </p>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="mt-10 flex flex-wrap items-center justify-between gap-3">
+    <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+      Issues
+      {% if selected_severity or selected_category %}
+        <span class="text-sm font-normal text-slate-400 dark:text-slate-500">(filtered)</span>
+      {% endif %}
+    </h2>
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="{% url 'scans:scan-results' scan.pk %}" class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 {% if not selected_severity and not selected_category %}ring-2 ring-brand-500{% endif %}">All</a>
+      {% for sev in severity_options %}
+        <a href="{% url 'scans:scan-results' scan.pk %}?severity={{ sev }}{% if selected_category %}&category={{ selected_category }}{% endif %}" class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium capitalize text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 {% if selected_severity == sev %}ring-2 ring-brand-500{% endif %}">{{ sev }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="mt-4 space-y-3">
+    {% for issue in issues %}
+      <a href="{% url 'scans:issue-detail' scan.pk issue.pk %}" class="block rounded-xl border border-slate-200 p-4 transition-colors hover:border-brand-300 hover:bg-brand-50/40 dark:border-slate-800 dark:hover:border-brand-800 dark:hover:bg-brand-950/30">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold {{ issue.severity|severity_badge }}">{{ issue.get_severity_display }}</span>
+          <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{{ issue.get_category_display }}</span>
+          <span class="text-xs text-slate-400 dark:text-slate-500">{{ issue.source|source_label }}</span>
+          {% if issue.viewport_width %}
+            <span class="text-xs text-slate-400 dark:text-slate-500">{{ issue.viewport_width }} &times; {{ issue.viewport_height }}</span>
+          {% endif %}
+          {% if issue.confidence > 0 %}
+            <span class="text-xs text-slate-400 dark:text-slate-500">{{ issue.confidence|floatformat:2 }} confidence</span>
+          {% endif %}
+        </div>
+        <h3 class="mt-2 font-medium text-slate-900 dark:text-slate-100">{{ issue.title }}</h3>
+        {% if issue.description %}
+          <p class="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{{ issue.description }}</p>
+        {% endif %}
+      </a>
+    {% empty %}
+      <div class="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
+        No issues match this filter.
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if screenshots %}
+    <h2 class="mt-10 text-lg font-semibold text-slate-900 dark:text-slate-100">Screenshots</h2>
+    <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {% for shot in screenshots %}
+        <figure class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+          <img src="{% get_media_prefix %}{{ shot.path }}" alt="Screenshot at {{ shot.viewport_width }}x{{ shot.viewport_height }}" class="w-full bg-slate-100 dark:bg-slate-800" loading="lazy">
+          <figcaption class="border-t border-slate-200 px-3 py-2 text-xs font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            {{ shot.viewport_width }} &times; {{ shot.viewport_height }}
+          </figcaption>
+        </figure>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

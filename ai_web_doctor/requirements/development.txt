@@ -1,0 +1,4 @@
+-r base.txt
+
+# Development-only dependencies
+django-extensions>=3.2,<4.0

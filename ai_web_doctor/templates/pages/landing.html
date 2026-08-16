@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}AI Web Doctor — Free Website UI Testing &amp; Responsive Design Checker{% endblock %}
+{% block description %}Free website UI testing tool. Scan any URL in a real browser at 9 screen sizes to find responsive design issues, layout bugs, clipped text, and accessibility problems — then fix and verify them.{% endblock %}
+{% block og_title %}AI Web Doctor — Free Website UI Testing &amp; Responsive Design Checker{% endblock %}
+{% block og_description %}Scan your website across mobile, tablet, and desktop in a real browser. Detect responsive design, layout, and accessibility issues, then fix and verify each one.{% endblock %}
+
+{% block json_ld %}
+  {{ landing_json|json_script:"site-json" }}
+  {{ faq_json|json_script:"faq-json" }}
+{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-6xl px-4 pt-16 pb-12 text-center">
+  <div class="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 dark:border-brand-900 dark:bg-brand-950 dark:text-brand-300">
+    {% include "partials/icon.html" with name="activity" class="h-3.5 w-3.5" %}
+    Free website UI testing tool
+  </div>
+
+  <h1 class="mx-auto max-w-3xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl dark:text-slate-100">
+    Find broken UI before your users do.
+  </h1>
+  <p class="mx-auto mt-4 max-w-2xl text-lg text-slate-600 dark:text-slate-400">
+    The responsive design checker that loads your website in a real browser, tests it
+    at 9 screen sizes from mobile to desktop, and flags clipped text, overlapping
+    elements, accessibility problems, and layout bugs — then helps you fix and verify them.
+  </p>
+
+  <form id="scan" method="post" action="{% url 'scans:scan-list' %}" class="mx-auto mt-8 flex max-w-xl flex-col gap-3 sm:flex-row" aria-label="Scan a website">
+    {% csrf_token %}
+    <label for="url" class="sr-only">Website URL</label>
+    <div class="relative flex-1">
+      <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+        {% include "partials/icon.html" with name="scan" class="h-5 w-5" %}
+      </span>
+      <input
+        id="url"
+        type="url"
+        name="url"
+        placeholder="https://example.com"
+        required
+        class="w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 pr-4 text-slate-900 placeholder-slate-400 shadow-sm transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+      >
+    </div>
+    <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 py-3 font-semibold text-white shadow-sm transition-colors hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40">
+      Scan Website
+      {% include "partials/icon.html" with name="arrow-right" class="h-5 w-5" %}
+    </button>
+  </form>
+
+  <p class="mt-4 text-xs text-slate-400 dark:text-slate-500">
+    The scan runs in a real headless browser and checks layout across mobile, tablet, and desktop viewports.
+  </p>
+</section>
+
+<section class="border-t border-slate-200 dark:border-slate-800">
+  <div class="mx-auto max-w-6xl px-4 py-14">
+    <div class="mx-auto max-w-3xl">
+      <h2 class="text-center text-2xl font-bold text-slate-900 dark:text-slate-100">Your report at a glance</h2>
+      <p class="mt-2 text-center text-sm text-slate-500 dark:text-slate-400">
+        Example report — not real scan data.
+      </p>
+    </div>
+
+    <div class="mx-auto mt-8 max-w-3xl rounded-2xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p class="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">UI Health</p>
+          <p class="mt-1 flex items-baseline gap-2">
+            <span class="text-4xl font-bold text-slate-900 dark:text-slate-100">82</span>
+            <span class="text-lg text-slate-500 dark:text-slate-400">/ 100</span>
+            <span class="ml-2 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">Good</span>
+          </p>
+        </div>
+        <div class="grid grid-cols-2 gap-x-10 gap-y-2 text-sm sm:grid-cols-3">
+          {% for label, value in example_scores %}
+            <div class="flex items-center justify-between gap-6">
+              <span class="text-slate-500 dark:text-slate-400">{{ label }}</span>
+              <span class="font-semibold text-slate-900 dark:text-slate-100">{{ value }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      <p class="mt-4 border-t border-slate-200 pt-4 text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+        Sample data for illustration only.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="border-t border-slate-200 dark:border-slate-800">
+  <div class="mx-auto max-w-6xl px-4 py-14">
+    <div class="mx-auto max-w-3xl text-center">
+      <h2 class="text-2xl font-bold text-slate-900 dark:text-slate-100">Everything a website UI tester should check</h2>
+      <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+        Deterministic checks at every viewport, with AI only where visual reasoning matters.
+      </p>
+    </div>
+    <div class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+        <h3 class="font-semibold text-slate-900 dark:text-slate-100">Responsive design checker</h3>
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          Tests your layout at 9 viewport sizes, from 320px phones to 1440px desktop, and
+          reports horizontal overflow, clipped text, and overlapping elements.
+        </p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+        <h3 class="font-semibold text-slate-900 dark:text-slate-100">Accessibility testing</h3>
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          Runs axe-core WCAG checks for missing alt text, unlabeled buttons, contrast
+          failures, and more — explained in plain language.
+        </p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+        <h3 class="font-semibold text-slate-900 dark:text-slate-100">AI visual analysis</h3>
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          AI reviews screenshots to catch spacing, alignment, and color problems that
+          rule-based checks can't see — and never hides when it can't run.
+        </p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+        <h3 class="font-semibold text-slate-900 dark:text-slate-100">UI health score</h3>
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          A transparent 0-100 score across responsive, accessibility, visual, layout,
+          typography, and UX — with identical defects counted once.
+        </p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+        <h3 class="font-semibold text-slate-900 dark:text-slate-100">Fix and verify workflow</h3>
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          Every issue comes with a fix suggestion, and Verify Fix re-checks the exact
+          element to confirm the problem is actually gone.
+        </p>
+      </div>
+      <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+        <h3 class="font-semibold text-slate-900 dark:text-slate-100">Real browser rendering</h3>
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          No HTML guessing: pages are rendered in a real headless browser, so you see what
+          your users actually see.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" class="border-t border-slate-200 dark:border-slate-800">
+  <div class="mx-auto max-w-6xl px-4 py-14">
+    <h2 class="text-center text-2xl font-bold text-slate-900 dark:text-slate-100">How it works</h2>
+    <div class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+      {% for step in workflow %}
+        <div class="rounded-xl border border-slate-200 p-5 dark:border-slate-800">
+          <p class="font-mono text-xs font-semibold text-brand-600 dark:text-brand-400">0{{ forloop.counter }}</p>
+          <h3 class="mt-2 font-semibold text-slate-900 dark:text-slate-100">{{ step }}</h3>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="border-t border-slate-200 dark:border-slate-800">
+  <div class="mx-auto max-w-3xl px-4 py-14">
+    <h2 class="text-center text-2xl font-bold text-slate-900 dark:text-slate-100">Frequently asked questions</h2>
+    <div class="mt-8 divide-y divide-slate-200 dark:divide-slate-800">
+      {% for faq in SEO_FAQS %}
+        <details class="group py-4">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-slate-900 dark:text-slate-100">
+            {{ faq.question }}
+            <span class="text-slate-400 transition-transform group-open:rotate-45">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{{ faq.answer }}</p>
+        </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="border-t border-slate-200 dark:border-slate-800">
+  <div class="mx-auto max-w-6xl px-4 py-14 text-center">
+    <h2 class="text-2xl font-bold text-slate-900 dark:text-slate-100">A developer tool, not a dashboard demo</h2>
+    <p class="mx-auto mt-3 max-w-2xl text-slate-600 dark:text-slate-400">
+      AI Web Doctor loads your site in a real browser, runs deterministic checks at every
+      viewport size, and only uses AI where visual reasoning matters.
+    </p>
+    <p class="mx-auto mt-4 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+      Paste a URL above or
+      <a href="{% url 'register' %}" class="font-semibold text-brand-600 hover:underline dark:text-brand-400">create a free account</a>
+      to save and compare scan history.
+    </p>
+  </div>
+</section>
+{% endblock %}

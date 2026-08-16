@@ -1,0 +1,53 @@
+# ============================================================================
+# AI Web Doctor — .gitignore
+# ============================================================================
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.pytest_cache/
+.coverage
+htmlcov/
+.coverage.*
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# --- Django / app data ------------------------------------------------------
+*.log
+*.sqlite3
+db.sqlite3
+staticfiles/
+media/
+celerybeat-schedule
+celerybeat.pid
+
+# --- Environment / secrets --------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Frontend / build artifacts ----------------------------------------------
+node_modules/
+static/css/site.css
+playwright-report/
+test-results/
+dist/
+build/
+
+# --- OS / editors ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
