@@ -14,8 +14,8 @@ services:
     runtime: docker
     plan: free
     region: oregon
-    dockerfilePath: ./ai_web_doctor/Dockerfile
-    dockerContext: ./ai_web_doctor
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     
     # Render's free tier doesn't support preDeployCommand, so migrations and startup 
     # are run inside the Dockerfile's CMD on startup. Gunicorn is optimized to run 
@@ -32,6 +32,12 @@ services:
 
       - key: SECRET_KEY
         generateValue: true
+
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com,localhost,127.0.0.1"
+
+      - key: SITE_URL
+        value: "https://ai-web-doctor.onrender.com"
 
       - key: CELERY_TASK_ALWAYS_EAGER
         value: "True" # Fallback to in-process background thread scanning (avoids Redis)

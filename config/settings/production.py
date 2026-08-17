@@ -17,7 +17,18 @@ EMAIL_BACKEND = env(
 )
 
 # Static files are collected into STATIC_ROOT and served by the web server.
-STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+# Note: Django 5.2 requires STORAGES (STATICFILES_STORAGE is ignored).
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
+    },
+}
+
+# Serve static files directly from gunicorn (no separate web server needed).
+MIDDLEWARE = ["whitenoise.middleware.WhiteNoiseMiddleware"] + MIDDLEWARE  # noqa: F405
 
 # Basic production hardening. Adjust to match your proxy/load balancer.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

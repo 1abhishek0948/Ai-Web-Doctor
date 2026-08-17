@@ -1,0 +1,32 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Django static/media (regenerated at build time)
+staticfiles/
+media/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# Local tooling
+.vscode/
+.idea/
+.DS_Store
+
+# Tests and docs are not needed in the runtime image
+tests/
+docs/
+*.log

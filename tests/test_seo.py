@@ -72,6 +72,7 @@ class LandingMetaTests(TestCase):
         self.assertNotIn("utm_source", html.split('rel="canonical"')[1].split('">')[0])
 
 
+@override_settings(SITE_URL=SITE_URL)
 class NoIndexTests(TestCase):
     def test_scan_results_noindex(self):
         scan = Scan.objects.create(

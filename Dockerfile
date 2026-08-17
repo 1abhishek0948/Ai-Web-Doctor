@@ -49,6 +49,9 @@ COPY . .
 # Copy the Tailwind-built stylesheet from the builder stage.
 COPY --from=builder /app/static/css/site.css ./static/css/site.css
 
+# Collect static files (with hashed names for ManifestStaticFilesStorage).
+RUN python manage.py collectstatic --noinput
+
 EXPOSE 8000
 
 CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 2 --timeout 120"]

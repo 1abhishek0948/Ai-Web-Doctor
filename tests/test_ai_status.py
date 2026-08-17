@@ -71,7 +71,9 @@ class AnalyzeScanStatusTests(TestCase):
         self.assertEqual(result.reason, "disabled_or_no_key")
 
     def test_no_screenshots_is_unavailable(self):
-        with mock.patch.object(service, "build_payload", return_value={"prompt": "x", "images": []}):
+        with mock.patch.object(service, "_provider_available", return_value=True), (
+            mock.patch.object(service, "build_payload", return_value={"prompt": "x", "images": []})
+        ):
             result = service.analyze_scan(self.scan)
         self.assertFalse(result.available)
         self.assertEqual(result.status, "unavailable")
