@@ -50,7 +50,10 @@ COPY . .
 COPY --from=builder /app/static/css/site.css ./static/css/site.css
 
 # Collect static files (with hashed names for ManifestStaticFilesStorage).
-RUN python manage.py collectstatic --noinput
+# Uses production settings so the manifest matches runtime behavior; a
+# placeholder key is fine at build time (Render overrides it at runtime).
+RUN SECRET_KEY=build-time-only-not-for-production python manage.py collectstatic \
+    --noinput --settings=config.settings.production
 
 EXPOSE 8000
 

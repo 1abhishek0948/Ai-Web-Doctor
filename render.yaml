@@ -30,6 +30,9 @@ services:
       - key: DEBUG
         value: "False"
 
+      - key: DJANGO_SETTINGS_MODULE
+        value: "config.settings.production"
+
       - key: SECRET_KEY
         generateValue: true
 
