@@ -1,0 +1,46 @@
+# ============================================================================
+# Render Blueprint Configuration (render.yaml)
+# Use this to deploy AI Web Doctor to Render's Free Plan with a single click.
+# ============================================================================
+
+databases:
+  - name: ai-web-doctor-db
+    plan: free
+    region: oregon # Render databases are deployed in a specific region
+
+services:
+  - type: web
+    name: ai-web-doctor
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./ai_web_doctor/Dockerfile
+    dockerContext: ./ai_web_doctor
+    
+    # Render's free tier doesn't support preDeployCommand, so migrations and startup 
+    # are run inside the Dockerfile's CMD on startup. Gunicorn is optimized to run 
+    # with 1 worker and 2 threads to fit within the 512MB RAM limit.
+    
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-web-doctor-db
+          property: connectionString
+
+      - key: DEBUG
+        value: "False"
+
+      - key: SECRET_KEY
+        generateValue: true
+
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "True" # Fallback to in-process background thread scanning (avoids Redis)
+
+      - key: TRUST_X_FORWARDED_FOR
+        value: "True" # Required behind Render's load balancer proxy for rate limits
+
+      - key: GEMINI_API_KEY
+        sync: false # Prompts the user to input their Gemini API key on deployment
+
+      - key: GEMINI_MODEL
+        value: "gemini-2.0-flash" # Default recommended model

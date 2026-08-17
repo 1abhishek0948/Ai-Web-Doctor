@@ -28,10 +28,16 @@ SECRET_KEY = env("SECRET_KEY", default="")
 DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+if "RENDER_EXTERNAL_HOSTNAME" in os.environ:
+    render_host = os.environ["RENDER_EXTERNAL_HOSTNAME"]
+    if render_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(render_host)
 
 # Site identity, used for canonical URLs, Open Graph tags, and the sitemap.
 # Set SITE_URL to the public production domain (e.g. https://aiwebdoctor.onrender.com).
 SITE_URL = env("SITE_URL", default="http://localhost:8000")
+if "RENDER_EXTERNAL_HOSTNAME" in os.environ and SITE_URL == "http://localhost:8000":
+    SITE_URL = f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}"
 SITE_NAME = env("SITE_NAME", default="AI Web Doctor")
 
 # Application definition
@@ -97,12 +103,17 @@ ASGI_APPLICATION = "config.asgi.application"
 # ---------------------------------------------------------------------------
 # Configured through the DATABASE_URL environment variable, e.g.
 #   postgres://user:password@localhost:5432/ai_web_doctor
-DATABASES = {
-    "default": env.db(
-        "DATABASE_URL",
-        default=f"postgres://postgres:postgres@localhost:5432/ai_web_doctor",
-    ),
-}
+if env.str("DATABASE_URL", default=""):
+    DATABASES = {
+        "default": env.db("DATABASE_URL"),
+    }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -136,12 +147,15 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Redis / Celery
-REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+# Redis / Celery
+# Fallback to an empty string if Redis is not configured (e.g., Render free plan).
+REDIS_URL = env("REDIS_URL", default="")
 
 # Celery configuration
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
-CELERY_TASK_ALWAYS_EAGER = env("CELERY_TASK_ALWAYS_EAGER", default=DEBUG)
+# Fallback to eager mode if CELERY_TASK_ALWAYS_EAGER is set to True OR if no Redis broker is set.
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=not bool(CELERY_BROKER_URL))
 
 # Gemini / AI provider configuration.
 # See the AI settings block below (Part 6) for the full provider configuration.

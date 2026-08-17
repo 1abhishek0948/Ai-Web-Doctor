@@ -48,7 +48,10 @@ class BrowserSession:
 
     def __enter__(self) -> "BrowserSession":
         self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=self.settings.headless)
+        self.browser = self._playwright.chromium.launch(
+            headless=self.settings.headless,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
         context = self.browser.new_context(
             viewport={
                 "width": self.settings.viewport[0],
