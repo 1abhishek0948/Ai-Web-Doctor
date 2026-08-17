@@ -12,7 +12,7 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy only what Tailwind needs to resolve class names.
-COPY package.json tailwind.config.js postcss.config.js ./
+COPY package.json package-lock.json tailwind.config.js postcss.config.js ./
 COPY static/src ./static/src
 COPY templates ./templates
 
