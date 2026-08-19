@@ -2,15 +2,13 @@
 # Render Blueprint Configuration (render.yaml)
 # Use this to deploy AI Web Doctor to Render's Free Plan with a single click.
 #
-# Free tier memory is 512MB per instance. Chromium needs ~400MB alone, so
-# scans NEVER run on the web instance:
+# Free tier memory is 512MB per instance. Chromium needs ~400MB alone.
+# We run the scan in a short-lived subprocess (SCAN_SUBPROCESS_MODE) to ensure
+# Chromium releases memory entirely after each scan.
 #
-#   web    — gunicorn (small footprint) — marks scans QUEUED in Postgres
-#   worker — DB-polling worker (own instance) — claims queued scans from
-#            Postgres and runs them with Chromium, then exits, releasing all
-#            browser memory
-#
-# No Redis is used: Render's managed Redis is a paid add-on, so scans travel
+# Render disabled Free Tier Background Workers on Jan 1, 2024, so everything
+# must run within the Web service. To prevent OOM kills, we use extreme
+# memory-saving flags for Chromium (CHROMIUM_LOW_MEMORY_MODE, SCAN_BLOCK_IMAGES).
 # through Postgres instead of a broker. Without the web/worker split, the web
 # process + Chromium exceed 512MB and the kernel OOM-kills the whole container
 # mid-scan ("server restarted or ran out of memory").
@@ -56,66 +54,16 @@ services:
         value: "https://ai-web-doctor.onrender.com"
 
       - key: SCAN_WORKER_MODE
-        value: "True" # Scans run on the worker instance, never here
+        value: "False" # Web service runs the scan itself
 
       - key: SCAN_SUBPROCESS_MODE
-        value: "False" # Never spawn Chromium here — the worker owns the browser
+        value: "True" # Run in a short-lived subprocess to release RAM
 
       - key: MAX_CONCURRENT_SCANS
         value: "1" # One scan at a time on low-RAM instances
 
-      - key: GEMINI_API_KEY
-        sync: false # Prompts the user to input their Gemini API key on deployment
-
-      - key: GEMINI_MODEL
-        value: "gemini-3.6-flash" # Default recommended model (matches .env.example)
-
-      - key: TRUST_X_FORWARDED_FOR
-        value: "True" # Required behind Render's load balancer proxy for rate limits
-
-  # --- Worker: owns Chromium and executes the scans ---------------------------
-  - type: worker
-    name: ai-web-doctor-worker
-    runtime: docker
-    plan: free
-    region: oregon
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    command: python manage.py scan_worker
-
-    # The worker gets its own 512MB instance: Chromium (the biggest consumer)
-    # runs in-process inside the worker loop, so nothing competes with it. It
-    # polls Postgres every few seconds for QUEUED scans and claims them one at
-    # a time.
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: ai-web-doctor-db
-          property: connectionString
-
-      - key: DEBUG
-        value: "False"
-
-      - key: DJANGO_SETTINGS_MODULE
-        value: "config.settings.production"
-
-      - key: SECRET_KEY
-        generateValue: true # Worker never renders sessions, so a distinct value is fine
-
-      - key: ALLOWED_HOSTS
-        value: ".onrender.com,localhost,127.0.0.1"
-
-      - key: SCAN_WORKER_MODE
-        value: "True"
-
-      - key: SCAN_SUBPROCESS_MODE
-        value: "False" # In-process scans: one python process hosts Chromium
-
       - key: SCAN_VIEWPORTS
         value: "[[390,844],[1440,900]]" # Mobile + desktop: 2 viewports to fit free-tier CPU/RAM
-
-      - key: MAX_CONCURRENT_SCANS
-        value: "1"
 
       - key: MAX_SCAN_DURATION
         value: "600" # Free-tier CPU is throttled; give scans a 10-minute budget
@@ -138,13 +86,16 @@ services:
       - key: SCAN_BLOCK_HEAVY_RESOURCES
         value: "True" # Block fonts/media/trackers via CDP during scans
 
-      # Images drive most of Chromium's transient memory on media-heavy sites;
-      # blocking them keeps peak RSS comfortably inside the free plan.
       - key: SCAN_BLOCK_IMAGES
-        value: "True"
+        value: "True" # Crucial: Images drive transient memory, block them to avoid OOM
 
       - key: GEMINI_API_KEY
-        sync: false # Same key as the web service (prompted on deployment)
+        sync: false # Prompts the user to input their Gemini API key on deployment
 
       - key: GEMINI_MODEL
-        value: "gemini-3.6-flash"
+        value: "gemini-3.6-flash" # Default recommended model (matches .env.example)
+
+      - key: TRUST_X_FORWARDED_FOR
+        value: "True" # Required behind Render's load balancer proxy for rate limits
+
+
