@@ -50,7 +50,12 @@ class BrowserSession:
         self._playwright = sync_playwright().start()
         self.browser = self._playwright.chromium.launch(
             headless=self.settings.headless,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+            ],
         )
         context = self.browser.new_context(
             viewport={

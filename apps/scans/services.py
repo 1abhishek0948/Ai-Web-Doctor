@@ -17,22 +17,50 @@ import json
 import logging
 import threading
 import time
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.db.models import Q
+from django.utils import timezone
 
 from celery.exceptions import SoftTimeLimitExceeded
 
 from apps.ai.service import analyze_scan
 from apps.issues.models import Issue
-from apps.scans.models import AIStatus, PageMetric, ProgressStage, Scan, Screenshot
+from apps.scans.models import AIStatus, PageMetric, ProgressStage, Scan, ScanStatus, Screenshot
 from apps.scans.scoring import compute_health_score
 from config.logging_config import log_event
 from scanner.analyzer import ScanError, ScanSecurityError, scan_site
 from scanner.browser import BrowserSettings
 
 logger = logging.getLogger(__name__)
+
+
+def recover_stale_scans() -> int:
+    """Mark scans stuck in queued/running as failed.
+
+    A scan can be left permanently ``running`` when the process hosting it
+    dies (OOM kill, deploy, crash) — the state machine never gets a chance to
+    run its finally handler. This sweeps those scans so the UI shows a clear
+    error instead of an eternal spinner.
+    """
+    cutoff = timezone.now() - timedelta(seconds=settings.MAX_SCAN_DURATION + 60)
+    stale = Scan.objects.filter(
+        status__in=[ScanStatus.QUEUED, ScanStatus.RUNNING]
+    ).filter(Q(started_at__lt=cutoff) | Q(started_at__isnull=True, created_at__lt=cutoff))
+    count = stale.count()
+    if count:
+        logger.warning("Recovering %d stale scan(s) stuck in queued/running.", count)
+    for scan in stale.iterator():
+        scan.set_failed(
+            "The scan did not complete — the server restarted or ran out of memory. "
+            "Please scan again."
+        )
+    if count:
+        log_event("scan.recovered", count=count)
+    return count
 
 
 class ScanCreationError(Exception):
@@ -291,6 +319,7 @@ def execute_scan(scan_id: int) -> None:
 
 def dispatch_scan(scan: Scan) -> None:
     """Dispatch a scan to Celery, or to a dev fallback thread."""
+    recover_stale_scans()
     if settings.CELERY_TASK_ALWAYS_EAGER:
         logger.info("Running scan %s in a background thread (dev fallback).", scan.pk)
         log_event("scan.dispatched", scan_id=scan.pk, mode="thread")

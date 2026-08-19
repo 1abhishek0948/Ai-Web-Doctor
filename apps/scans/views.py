@@ -19,7 +19,12 @@ from apps.issues.services import verify_issue
 from apps.scans.models import ProgressStage, Scan, ScanStatus
 from apps.scans.ratelimit import get_client_ip, quota_exceeded
 from apps.scans.scoring import compute_score_summary
-from apps.scans.services import ScanCreationError, create_scan, dispatch_scan
+from apps.scans.services import (
+    ScanCreationError,
+    create_scan,
+    dispatch_scan,
+    recover_stale_scans,
+)
 
 VALID_SEVERITIES = ("critical", "high", "medium", "low", "info")
 
@@ -62,11 +67,13 @@ def scan_list_view(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         return _create_and_dispatch(request)
 
+    recover_stale_scans()
     scans = Scan.objects.annotate(issue_count=Count("issues"))[:50]
     return render(request, "pages/scans.html", {"scans": scans})
 
 
 def _create_and_dispatch(request: HttpRequest) -> HttpResponse:
+    recover_stale_scans()
     raw_url = request.POST.get("url", "")
     client_ip = get_client_ip(request)
 
@@ -103,6 +110,7 @@ def _create_and_dispatch(request: HttpRequest) -> HttpResponse:
 
 def scan_detail_view(request: HttpRequest, scan_id: int) -> HttpResponse:
     """Render the scan status/result page."""
+    recover_stale_scans()
     scan = get_object_or_404(Scan, pk=scan_id)
     context = _stage_context(scan)
     context["scan"] = scan
@@ -114,6 +122,7 @@ def scan_detail_view(request: HttpRequest, scan_id: int) -> HttpResponse:
 
 def scan_progress_view(request: HttpRequest, scan_id: int) -> HttpResponse:
     """Return an HTMX partial reflecting the scan's real progress/result."""
+    recover_stale_scans()
     scan = get_object_or_404(Scan, pk=scan_id)
     context = _stage_context(scan)
     context["scan"] = scan
@@ -132,6 +141,7 @@ def results_view(request: HttpRequest, scan_id: int) -> HttpResponse:
     hardcoded, and unanalyzed categories are clearly labeled instead of shown
     as a fake zero.
     """
+    recover_stale_scans()
     scan = get_object_or_404(Scan, pk=scan_id)
     severity = request.GET.get("severity", "")
     category = request.GET.get("category", "")
