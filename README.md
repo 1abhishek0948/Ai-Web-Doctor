@@ -248,7 +248,7 @@ Requirements: Python 3.12+, PostgreSQL 16, Node.js (for the Tailwind bundle), an
 scans Playwright's Chromium (`playwright install chromium`).
 
 ```bash
-git clone YOUR_REPOSITORY_URL
+git clone https://github.com/1abhishek0948/Ai-Web-Doctor
 cd ai_web_doctor
 
 python3 -m venv .venv && source .venv/bin/activate
