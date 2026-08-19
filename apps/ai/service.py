@@ -29,7 +29,7 @@ from apps.ai.prompts import (
     summarize_deterministic,
     summarize_dom,
 )
-from apps.ai.schemas import AIAnalysis, AIFix, normalize_language
+from apps.ai.schemas import AIAnalysis, AIFix, AIIssue, VALID_CATEGORIES, normalize_language
 from apps.issues.models import Issue, IssueSource, SEVERITY_ORDER
 from config.logging_config import log_event
 
@@ -115,8 +115,39 @@ def _jaccard(a: set[str], b: set[str]) -> float:
     return len(a & b) / len(a | b)
 
 
+def _extract_json_object(text: str) -> str:
+    """Extract the first balanced JSON object, tolerating nested braces and
+    braces inside string literals (unlike the flat regex fallback)."""
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("The AI response contained no JSON object.")
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    raise ValueError("The AI response contained no balanced JSON object.")
+
+
 def _parse_json(raw: str) -> dict[str, Any]:
-    """Parse a JSON object from model output, tolerating code fences."""
+    """Parse a JSON object from model output, tolerating code fences and
+    surrounding prose."""
     text = (raw or "").strip()
     if text.startswith("```"):
         text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
@@ -125,10 +156,13 @@ def _parse_json(raw: str) -> dict[str, Any]:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        match = _JSON_BLOCK_RE.search(text)
-        if match:
-            return json.loads(match.group(0))
-        raise ValueError("The AI response was not valid JSON.")
+        try:
+            return json.loads(_extract_json_object(text))
+        except (json.JSONDecodeError, ValueError):
+            match = _JSON_BLOCK_RE.search(text)
+            if match:
+                return json.loads(match.group(0))
+            raise ValueError("The AI response was not valid JSON.")
 
 
 def _issue_to_finding(issue: Issue) -> dict[str, Any]:
@@ -231,21 +265,47 @@ def _fit_payload_size(prompt: str, images: list[dict[str, Any]]) -> list[dict[st
     return kept
 
 
+def _truncate_to_budget(text: str, budget_tokens: int) -> str:
+    """Hard-cut a prompt so it stays within the per-request token budget.
+
+    Uses a conservative ~4 chars/token heuristic. Real text-only prompts are
+    only a few thousand tokens, so this only triggers on pathological input.
+    """
+    max_chars = max(512, int(budget_tokens) * 4)
+    if len(text) <= max_chars:
+        return text
+    return f"{text[:max_chars]}\n… (truncated to token budget)"
+
+
 def build_payload(scan) -> dict[str, Any]:
-    """Assemble the compact prompt + images payload for Gemini."""
+    """Assemble the compact prompt (+ optional images) payload for Gemini.
+
+    Text-only by default (AI_SEND_IMAGES=False): screenshots are the dominant
+    input-token cost, and analysis quality is preserved by giving the model
+    the deterministic findings and DOM structure. When images are enabled,
+    representative viewports are attached as before.
+    """
     findings = [_issue_to_finding(i) for i in scan.issues.all()]
-    images = _select_screenshots(scan)
     context = _load_scan_context(scan)
     dom_snapshots = context.get("dom_snapshots", [])
+
+    if settings.AI_SEND_IMAGES:
+        images = _select_screenshots(scan)
+        viewports = [img["viewport"] for img in images]
+    else:
+        images = []
+        viewports = []
 
     prompt = build_payload_text(
         url=scan.normalized_url or scan.url,
         title=context.get("title", ""),
-        viewports=[img["viewport"] for img in images],
+        viewports=viewports,
         deterministic_summary=summarize_deterministic(findings),
         dom_summary=summarize_dom(dom_snapshots),
     )
-    images = _fit_payload_size(prompt, images)
+    prompt = _truncate_to_budget(prompt, settings.AI_MAX_PROMPT_TOKENS)
+    if settings.AI_SEND_IMAGES:
+        images = _fit_payload_size(prompt, images)
     return {"prompt": prompt, "images": images}
 
 
@@ -281,6 +341,22 @@ def _parse_viewport(value: Any) -> tuple[int, int] | None:
     return None
 
 
+def _normalize_severity(value: Any) -> str:
+    """Map a severity label to a valid one; unknown values fall back to info."""
+    key = str(value or "").strip().lower()
+    if key in ("critical", "high", "medium", "low", "info"):
+        return key
+    return "info"
+
+
+def _normalize_category(value: Any) -> str:
+    """Map a category label to a valid one; unknown values fall back to ux."""
+    key = str(value or "").strip().lower()
+    if key in VALID_CATEGORIES:
+        return key
+    return "ux"
+
+
 def _normalize_issue(item: Any) -> Any:
     """Map alternate model field names onto the canonical AIIssue shape."""
     if not isinstance(item, dict):
@@ -290,6 +366,14 @@ def _normalize_issue(item: Any) -> Any:
         out["category"] = _TYPE_TO_CATEGORY.get(
             str(out["type"]).strip().lower(), str(out["type"]).strip().lower()
         )
+    out["category"] = _normalize_category(out.get("category"))
+    out["severity"] = _normalize_severity(out.get("severity"))
+    for key in ("viewport_width", "viewport_height"):
+        value = out.get(key)
+        if isinstance(value, str):
+            parsed = _parse_viewport(value)
+            if parsed is not None:
+                out[key] = parsed[0] if key == "viewport_width" else parsed[1]
     if not out.get("viewport_width") or not out.get("viewport_height"):
         parsed = _parse_viewport(out.get("viewport"))
         if parsed is not None:
@@ -300,12 +384,23 @@ def _normalize_issue(item: Any) -> Any:
 
 
 def _validate_analysis(raw: str) -> AIAnalysis:
+    """Parse model output leniently: individually-invalid issues are skipped
+    instead of failing the whole analysis."""
     parsed = _parse_json(raw)
     if isinstance(parsed, list):
         parsed = {"issues": parsed}
-    if isinstance(parsed, dict) and isinstance(parsed.get("issues"), list):
-        parsed = {"issues": [_normalize_issue(i) for i in parsed["issues"]]}
-    return AIAnalysis.model_validate(parsed)
+    issues = parsed.get("issues") if isinstance(parsed, dict) else None
+    if not isinstance(issues, list):
+        raise ValueError("The AI response was not a valid issues list.")
+
+    valid: list[AIIssue] = []
+    for item in issues:
+        try:
+            valid.append(AIIssue.model_validate(_normalize_issue(item)))
+        except (ValidationError, TypeError, ValueError):
+            logger.warning("Skipping invalid AI issue: %s", str(item)[:120])
+            continue
+    return AIAnalysis(issues=valid)
 
 
 def _match_score(ai_issue, existing: Issue) -> float:
@@ -446,13 +541,6 @@ def analyze_scan(scan) -> AIAnalysisResult:
         )
 
     payload = build_payload(scan)
-    if not payload["images"]:
-        return AIAnalysisResult(
-            available=False,
-            status="unavailable",
-            reason="no_screenshots",
-            message="No screenshots available for AI analysis.",
-        )
 
     provider = get_provider()
     analysis: AIAnalysis | None = None
@@ -531,7 +619,7 @@ def _build_fix_payload(issue: Issue) -> dict[str, Any]:
     )
 
     context_parts: list[str] = []
-    snippet = evidence.get("snippet")
+    snippet = (evidence.get("snippet") or "")[:1200]
     if snippet:
         context_parts.append(f"Relevant element HTML:\n{snippet}")
     context_parts.append(
@@ -539,12 +627,18 @@ def _build_fix_payload(issue: Issue) -> dict[str, Any]:
         "a developer must review and apply the fix manually."
     )
     prompt = f"{build_fix_prompt(issue_text, '\n\n'.join(context_parts))}"
+    prompt = _truncate_to_budget(prompt, settings.AI_MAX_PROMPT_TOKENS)
 
     payload: dict[str, Any] = {
         "prompt": prompt,
         "images": [],
         "issue": issue,
     }
+
+    # Screenshots are only attached when AI_SEND_IMAGES is enabled; text-only
+    # fix requests keep input tokens in the low thousands.
+    if not settings.AI_SEND_IMAGES:
+        return payload
 
     screenshot = None
     if issue.viewport_width:

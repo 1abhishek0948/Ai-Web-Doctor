@@ -58,6 +58,9 @@ services:
       - key: MAX_SCAN_DURATION
         value: "300" # Slower instance needs a longer budget than 120s
 
+      - key: SCAN_MAX_DURATION_SECONDS
+        value: "300" # Hard kill deadline for the scan subprocess (watchdog)
+
       - key: MAX_SCREENSHOTS
         value: "8"
 
@@ -68,13 +71,14 @@ services:
         value: "True" # Capped V8 heaps + no background services
 
       - key: SCAN_BLOCK_HEAVY_RESOURCES
-        value: "True" # Abort fonts/media/trackers during scans
+        value: "True" # Block fonts/media/trackers via CDP during scans
 
-      # Set "True" only on very tight instances (<300MB): also aborts image
-      # requests, shrinking peak RSS to ~270MB at the cost of slightly less
-      # accurate responsive checks. On Render's 512MB free plan keep it off.
+      # Images drive most of Chromium's transient memory on media-heavy sites;
+      # blocking them keeps peak RSS comfortably inside Render's 512MB free
+      # plan even for sites like nytimes.com. Slight accuracy cost on
+      # responsive checks only.
       - key: SCAN_BLOCK_IMAGES
-        value: "False"
+        value: "True"
 
       - key: TRUST_X_FORWARDED_FOR
         value: "True" # Required behind Render's load balancer proxy for rate limits

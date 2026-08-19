@@ -9,12 +9,11 @@ counts:
   Visual 20, Layout 15, Typography 10, UX 10.
 * The same root defect detected at several viewports counts **once** at its
   highest severity, so scanning 9 viewports never multiplies the penalty.
-* A group only contributes when it was actually analyzed. Deterministic groups
-  are analyzed as soon as the scan completes; AI-only groups depend on the
-  scan's machine-readable ``ai_status``.
+* Every category is analyzed by deterministic checks as soon as the scan
+  completes, so a completed scan always has full coverage; AI analysis is an
+  optional enrichment source whose findings merge into the same categories.
 * The overall score is normalized to the weight that was actually analyzed
-  (``earned / analyzed_weight * 100``), so a clean site scores 100 even when
-  AI analysis was unavailable; the coverage note explains the caveat.
+  (``earned / analyzed_weight * 100``), so a clean site scores 100.
 """
 
 from __future__ import annotations
@@ -25,7 +24,6 @@ from django.db.models import Count
 
 from apps.issues.models import Category, SEVERITIES
 from apps.scans.categories import (
-    AI_ONLY_CATEGORIES,
     GROUP_ORDER,
     category_group,
     group_label,
@@ -156,37 +154,17 @@ def _root_key(issue) -> tuple[str, str, str, str]:
     return (issue.category, issue.source, check, selector)
 
 
-def _ai_state(scan) -> tuple[str, str]:
-    """State + reason for AI-only categories, derived from ``scan.ai_status``."""
-    status = scan.ai_status or "pending"
-    if status == "completed":
-        return ANALYZED, ""
-    if status == "pending":
-        return NOT_ANALYZED, "AI analysis has not run yet."
-    if status == "running":
-        return NOT_ANALYZED, "AI analysis is still running."
-    if status == "unavailable":
-        return NOT_ANALYZED, "AI visual analysis is unavailable."
-    if status == "skipped":
-        return NOT_ANALYZED, "AI analysis was skipped."
-    if status == "rate_limited":
-        return FAILED, "AI analysis failed (provider rate-limited)."
-    return FAILED, "AI analysis failed."
-
-
 def _category_state(scan, category: str) -> tuple[str, str]:
     """State + reason for a single raw category.
 
-    Deterministic categories count as analyzed once the scan's deterministic
-    pass has finished (completed/partial status, or progress at REPORTING while
-    the health score is being computed mid-execution). A failed scan never
-    yields a score, whatever a stale ``ai_status`` says.
+    Deterministic checks cover all ten categories, so a category counts as
+    analyzed once the deterministic pass has finished (completed/partial
+    status, or progress at REPORTING while the health score is being computed
+    mid-execution). A failed scan never yields a score, whatever a stale
+    ``ai_status`` says.
     """
     if scan.status == ScanStatus.FAILED:
-        state = FAILED if category not in AI_ONLY_CATEGORIES else NOT_ANALYZED
-        return state, "The scan could not be completed."
-    if category in AI_ONLY_CATEGORIES:
-        return _ai_state(scan)
+        return FAILED, "The scan could not be completed."
     if scan.status in COMPLETED_STATUSES or scan.progress_stage in (
         ProgressStage.REPORTING,
         ProgressStage.COMPLETE,
@@ -206,8 +184,6 @@ def _group_state(scan, group: str, member_states: list[tuple[str, str]]) -> tupl
         return NOT_ANALYZED, next(
             (reason for state, reason in member_states if state == NOT_ANALYZED), ""
         )
-    if group == "ux":
-        return PARTIAL, "Only deterministic checks ran for this group."
     return PARTIAL, "Only some checks in this group were analyzed."
 
 

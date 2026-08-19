@@ -27,12 +27,14 @@ DEFAULT_VIEWPORT = (375, 812)
 
 # Flags that keep Chromium's RSS small enough for low-memory hosts: capped V8
 # heaps, no background services, no crash reporter. Note: --single-process is
-# NOT used — it is unstable in Playwright's bundled Chromium and crashes
-# randomly. The V8 heap cap must stay high enough for axe-core + DOM snapshot
-# evaluation; 64MB was too low and caused browser crashes.
+# NOT used (unstable in Playwright's bundled Chromium), --renderer-process-limit=1
+# is NOT used (wedges the renderer after axe-core on heavy pages), and the V8
+# heap cap is 256MB NOT 128MB: with 128MB, running DOM snapshot + axe-core on
+# media-heavy sites (nytimes.com) wedges the renderer and every later
+# page.evaluate() hangs forever. 256MB stays within Render free-tier memory
+# while keeping scans stable.
 LOW_MEMORY_ARGS = [
-    "--js-flags=--max-old-space-size=128 --max-semi-space-size=2",
-    "--renderer-process-limit=1",
+    "--js-flags=--max-old-space-size=256 --max-semi-space-size=4",
     "--disable-extensions",
     "--disable-background-networking",
     "--disable-sync",

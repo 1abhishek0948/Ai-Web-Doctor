@@ -77,9 +77,14 @@ def normalize_language(raw: str) -> str | None:
 
 
 class AIIssue(BaseModel):
-    """One visual/UX finding returned by the model."""
+    """One UX finding returned by the model.
 
-    model_config = ConfigDict(extra="forbid", strict=False)
+    ``extra="ignore"`` (not "forbid") so harmless extra fields the model adds
+    never invalidate an issue; individual invalid issues are skipped by the
+    service instead of failing the whole analysis.
+    """
+
+    model_config = ConfigDict(extra="ignore", strict=False)
 
     title: str = Field(min_length=3, max_length=200)
     severity: Severity
@@ -100,7 +105,7 @@ class AIIssue(BaseModel):
 class AIAnalysis(BaseModel):
     """The full structured response from the model."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     issues: list[AIIssue] = Field(default_factory=list)
 
@@ -108,7 +113,7 @@ class AIAnalysis(BaseModel):
 class AIFix(BaseModel):
     """A generated developer fix for a single issue."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     explanation: str = Field(min_length=5, max_length=1500)
     recommended_change: str = Field(min_length=5, max_length=1500)

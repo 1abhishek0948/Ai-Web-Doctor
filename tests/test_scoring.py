@@ -1,9 +1,9 @@
 """Tests for the UI Health scoring service and category mapping.
 
-The score must truthfully reflect what was actually analyzed: analyzed
-categories with zero issues contribute their full weight, AI-only categories
-never contribute when AI did not run, and a scan that failed entirely has no
-score at all.
+The score must truthfully reflect what was actually analyzed: every category
+is covered by deterministic checks on any completed scan (full coverage),
+analyzed categories with zero issues contribute their full weight, and a scan
+that failed entirely has no score at all.
 """
 
 from __future__ import annotations
@@ -22,9 +22,7 @@ from apps.scans.categories import (
 )
 from apps.scans.models import AIStatus, Scan, ScanStatus
 from apps.scans.scoring import (
-    FAILED,
-    NOT_ANALYZED,
-    PARTIAL,
+    ANALYZED,
     SEVERITY_PENALTIES,
     compute_category_states,
     compute_health_score,
@@ -66,7 +64,8 @@ class CategoryMappingTests(TestCase):
 
     def test_no_category_is_dropped(self):
         mapped = set(CATEGORY_TO_GROUP)
-        self.assertEqual(mapped, AI_ONLY_CATEGORIES | DETERMINISTIC_CATEGORIES)
+        self.assertEqual(mapped, DETERMINISTIC_CATEGORIES)
+        self.assertEqual(AI_ONLY_CATEGORIES, frozenset())
 
     def test_members_cover_group(self):
         self.assertEqual(set(members("visual")), {"spacing", "color", "interaction", "performance"})
@@ -181,16 +180,16 @@ class ScoringTests(TestCase):
         self.assertEqual(by_group["layout"].root_count, 1)
         self.assertEqual(by_group["layout"].penalty, SEVERITY_PENALTIES["medium"])
 
-    def test_no_ai_scores_only_deterministic_analysis(self):
+    def test_ai_unavailable_still_full_coverage(self):
         scan = _scan(ai_status=AIStatus.UNAVAILABLE)
         summary = compute_score_summary(scan)
         self.assertEqual(summary.score, 100)
-        self.assertFalse(summary.full_coverage)
-        self.assertEqual(summary.coverage_weight, 70)
-        self.assertEqual(summary.coverage_percent, 70)
+        self.assertTrue(summary.full_coverage)
+        self.assertEqual(summary.coverage_weight, 100)
+        self.assertEqual(summary.coverage_percent, 100)
         visual = next(g for g in summary.groups if g.key == "visual")
-        self.assertEqual(visual.state, NOT_ANALYZED)
-        self.assertEqual(visual.raw_score, 0)
+        self.assertEqual(visual.state, ANALYZED)
+        self.assertEqual(visual.raw_score, visual.weight)
 
     def test_ai_completed_contributes_full_weight(self):
         scan = _scan(ai_status=AIStatus.COMPLETED)
@@ -198,11 +197,11 @@ class ScoringTests(TestCase):
         self.assertTrue(summary.full_coverage)
         self.assertEqual(summary.score, 100)
 
-    def test_ai_rate_limited_visual_groups_failed(self):
+    def test_ai_rate_limited_visual_groups_still_analyzed(self):
         scan = _scan(ai_status=AIStatus.RATE_LIMITED)
         summary = compute_score_summary(scan)
         visual = next(g for g in summary.groups if g.key == "visual")
-        self.assertEqual(visual.state, FAILED)
+        self.assertEqual(visual.state, ANALYZED)
         self.assertEqual(summary.score, 100)
 
     def test_failed_scan_has_no_score(self):
@@ -217,20 +216,20 @@ class ScoringTests(TestCase):
     def test_category_states(self):
         scan = _scan(ai_status=AIStatus.UNAVAILABLE)
         states = {cs.key: cs for cs in compute_category_states(scan)}
-        self.assertEqual(states["responsive"].state, "analyzed")
-        self.assertEqual(states["navigation"].state, "analyzed")
-        self.assertEqual(states["spacing"].state, NOT_ANALYZED)
-        self.assertEqual(states["ux"].state, NOT_ANALYZED)
+        self.assertEqual(states["responsive"].state, ANALYZED)
+        self.assertEqual(states["navigation"].state, ANALYZED)
+        self.assertEqual(states["spacing"].state, ANALYZED)
+        self.assertEqual(states["ux"].state, ANALYZED)
         self.assertEqual(states["responsive"].weight, 25)
 
-    def test_ai_skipped_is_not_analyzed(self):
+    def test_ai_skipped_still_analyzed(self):
         scan = _scan(ai_status=AIStatus.SKIPPED)
         states = {cs.key: cs for cs in compute_category_states(scan)}
-        self.assertEqual(states["typography"].state, NOT_ANALYZED)
+        self.assertEqual(states["typography"].state, ANALYZED)
 
-    def test_ux_group_partial_without_ai(self):
+    def test_ux_group_analyzed_without_ai(self):
         scan = _scan(ai_status=AIStatus.UNAVAILABLE)
         summary = compute_score_summary(scan)
         ux = next(g for g in summary.groups if g.key == "ux")
-        self.assertEqual(ux.state, PARTIAL)
+        self.assertEqual(ux.state, ANALYZED)
         self.assertEqual(ux.raw_score, ux.weight)

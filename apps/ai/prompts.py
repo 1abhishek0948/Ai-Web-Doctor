@@ -1,8 +1,11 @@
-"""Prompt templates for Gemini visual/UX analysis.
+"""Prompt templates for Gemini UX analysis.
 
-The prompt intentionally asks for subjective visual/UX reasoning only — never
-objective measurements (those come from the deterministic scanner). The model
-must return a strict JSON array matching :class:`apps.ai.schemas.AIAnalysis`.
+The prompt intentionally asks for subjective UX/design reasoning only — never
+objective measurements (those come from the deterministic scanner). Analysis is
+text-only by default: the model reviews the DOM structure summary and the
+automated measurements, not screenshots, keeping input tokens in the low
+thousands. The model must return a strict JSON array matching
+:class:`apps.ai.schemas.AIAnalysis`.
 """
 
 from __future__ import annotations
@@ -17,22 +20,23 @@ from apps.ai.schemas import (
 )
 
 SYSTEM_PROMPT = (
-    "You are a senior front-end designer reviewing screenshots of a website. "
-    "You provide visual and UX reasoning only. Do not guess measurements or "
-    "numbers you cannot see; leave precise objective checks to automated "
-    "tools. Analyze the provided screenshots for visual hierarchy, spacing "
-    "consistency, alignment, typography, visual balance, navigation usability, "
-    "CTA visibility, responsive behavior, visual inconsistencies, obvious UX "
-    "problems, and confusing layouts. Return ONLY a JSON object matching this "
-    "schema:\n"
+    "You are a senior front-end designer reviewing automated measurements and "
+    "the DOM structure of a website. You provide UX/design reasoning only. Do "
+    "not guess measurements or numbers you cannot see; precise objective "
+    "checks already come from the automated tool. Review the provided findings "
+    "and DOM structure for visual hierarchy, spacing consistency, alignment, "
+    "typography issues, navigation usability, CTA visibility, responsive "
+    "behavior, and confusing layouts that the measurements imply. Return ONLY "
+    "a JSON object matching this schema:\n"
     '{"issues": [{"title": str, "severity": "critical|high|medium|low|info", '
     '"category": "responsive|layout|spacing|typography|color|accessibility|'
     'navigation|interaction|performance|ux", "viewport_width": int, '
     '"viewport_height": int, "description": str, "likely_cause": str, '
     '"recommendation": str, "confidence": float between 0 and 1}]}\n'
-    "Use viewport_width and viewport_height that match one of the provided "
-    "screenshots. Report at most 20 issues, highest confidence first. Do not "
-    "invent issues; if the site looks fine, return an empty issues array."
+    "For viewport_width and viewport_height, reuse the viewport listed on the "
+    "matching measurement; if an issue applies to all viewports, use 1440 and "
+    "900. Report at most 20 issues, highest confidence first. Do not invent "
+    "issues; if the site looks fine, return an empty issues array."
 )
 
 
@@ -45,20 +49,20 @@ def build_payload_text(
     dom_summary: str,
 ) -> str:
     """Build the textual part of the analysis payload."""
-    viewport_text = ", ".join(f"{w}x{h}" for w, h in viewports)
+    viewport_text = ", ".join(f"{w}x{h}" for w, h in viewports) or "not provided"
     return (
         f"Website: {url}\n"
         f"Page title: {title}\n"
-        f"Screenshots provided for viewports: {viewport_text}\n\n"
+        f"Analyzed at viewports: {viewport_text}\n\n"
         f"Automated measurements (already known, do not re-measure):\n"
         f"{deterministic_summary}\n\n"
         f"Simplified DOM structure (for context):\n{dom_summary}\n\n"
-        "Provide your visual and UX analysis of the screenshots. "
+        "Provide your UX/design analysis of the measurements and DOM. "
         "Return strict JSON only."
     )
 
 
-def summarize_deterministic(findings: list[dict[str, Any]], limit: int = 40) -> str:
+def summarize_deterministic(findings: list[dict[str, Any]], limit: int = 25) -> str:
     """Turn deterministic/accessibility findings into a compact text summary."""
     if not findings:
         return "No deterministic problems detected."
@@ -73,23 +77,29 @@ def summarize_deterministic(findings: list[dict[str, Any]], limit: int = 40) -> 
 
 
 def summarize_dom(
-    dom_snapshots: list[list[dict[str, Any]]], limit_per_viewport: int = 40
+    dom_snapshots: list[list[dict[str, Any]]],
+    limit_per_viewport: int = 20,
+    max_snapshots: int = 2,
+    max_chars: int = 6000,
 ) -> str:
     """Produce a compact structural summary of DOM snapshots per viewport."""
     if not dom_snapshots:
         return "No DOM snapshot available."
     blocks = []
-    for snapshot in dom_snapshots[:4]:
+    for snapshot in dom_snapshots[:max_snapshots]:
         elements = []
         for el in snapshot[:limit_per_viewport]:
             tag = el.get("tag", "")
             text = (el.get("text") or "").strip()
             label = tag
             if text:
-                label = f"{tag} \"{text[:40]}\""
+                label = f"{tag} \"{text[:30]}\""
             elements.append(label)
-        blocks.append("\n".join(elements[:limit_per_viewport]))
-    return "\n\n".join(blocks)
+        blocks.append("\n".join(elements))
+    summary = "\n\n".join(blocks)
+    if len(summary) > max_chars:
+        return f"{summary[:max_chars]}\n… (truncated)"
+    return summary
 
 
 def _schema_field(name: str, enum: tuple[str, ...]) -> dict[str, Any]:
@@ -152,10 +162,14 @@ def build_fix_schema() -> dict[str, Any]:
 
 
 def build_generation_config(response_schema: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Return the generationConfig forcing structured JSON output."""
+    """Return the generationConfig forcing structured JSON output.
+
+    Note: temperature/top_p/top_k are deprecated and ignored by Gemini 3.x
+    models (and may cause HTTP 400 in future generations), so they are not
+    sent. Structured output is forced via response_mime_type + responseSchema.
+    """
     config: dict[str, Any] = {
         "response_mime_type": "application/json",
-        "temperature": 0.2,
         "max_output_tokens": 8192,
     }
     if response_schema is not None:

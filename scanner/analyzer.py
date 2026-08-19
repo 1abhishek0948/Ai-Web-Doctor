@@ -23,7 +23,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import Error as PlaywrightError
 
 from scanner.browser import BrowserSession, BrowserSettings
-from scanner import accessibility, dom, responsive, screenshots, security
+from scanner import accessibility, dom, responsive, screenshots, security, visual
 from config.logging_config import log_event
 
 logger = logging.getLogger(__name__)
@@ -208,6 +208,7 @@ def _scan_page(
     max_response_size: int,
     *,
     run_accessibility: bool = True,
+    run_visual: bool = True,
 ) -> ViewportScanResult:
     """Navigate and measure a page at one viewport, returning a viewport result.
 
@@ -232,6 +233,11 @@ def _scan_page(
             result.findings.extend(
                 accessibility.detect_accessibility(page, metrics["innerWidth"], metrics["innerHeight"])
             )
+
+        # Visual-design checks are viewport-independent: run them once at the
+        # first (desktop) viewport so counts stay clean across the site scan.
+        if run_visual:
+            result.findings.extend(visual.detect_visual(page, metrics))
 
         screenshot_bytes = screenshots.capture_screenshot(page)
         result.screenshot_bytes = len(screenshot_bytes)
@@ -375,6 +381,7 @@ def scan_site(
                     storage,
                     scan_id,
                     max_response_size,
+                    run_visual=(index == 0),
                 )
             )
 

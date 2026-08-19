@@ -68,11 +68,11 @@ class ResultsDashboardTests(TestCase):
         self.assertContains(response, "Horizontal overflow on mobile")
         self.assertNotContains(response, "Low contrast button label")
 
-    def test_visual_categories_not_analyzed_when_ai_off(self):
+    def test_visual_categories_analyzed_without_ai(self):
         self.scan.ai_message = AI_UNAVAILABLE_MESSAGE
         self.scan.save(update_fields=["ai_message"])
         response = self.client.get(reverse("scans:scan-results", args=[self.scan.pk]))
-        self.assertContains(response, "Not analyzed")
+        self.assertNotContains(response, "Not analyzed")
 
     def test_issue_detail_renders(self):
         response = self.client.get(

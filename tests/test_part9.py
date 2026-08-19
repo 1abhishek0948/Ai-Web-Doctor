@@ -180,7 +180,7 @@ class StructuredLoggingTests(TestCase):
 
 class GeminiApiKeyTests(TestCase):
     def test_api_key_in_header_not_url(self):
-        provider = GeminiProvider(api_key="super-secret-key-xyz")
+        provider = GeminiProvider(api_key="AIza-super-secret-key-xyz")
         with mock.patch("httpx.post") as post:
             post.return_value = mock.Mock(
                 status_code=200,
@@ -188,5 +188,23 @@ class GeminiApiKeyTests(TestCase):
             )
             provider._request({"contents": []})
         call = post.call_args
-        self.assertEqual(call.kwargs["headers"]["x-goog-api-key"], "super-secret-key-xyz")
+        self.assertEqual(call.kwargs["headers"]["x-goog-api-key"], "AIza-super-secret-key-xyz")
         self.assertNotIn("key=", call.args[0])
+
+    def test_oauth_token_falls_back_to_bearer_header(self):
+        provider = GeminiProvider(api_key="AQ.oauth-access-token")
+        responses = [
+            mock.Mock(status_code=401, text='{"error": "unauthorized"}'),
+            mock.Mock(
+                status_code=200,
+                json=lambda: {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]},
+            ),
+        ]
+        with mock.patch("httpx.post", side_effect=responses) as post:
+            provider._request({"contents": []})
+        calls = post.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertIn("x-goog-api-key", calls[0].kwargs["headers"])
+        bearer = calls[1].kwargs["headers"]
+        self.assertEqual(bearer["Authorization"], "Bearer AQ.oauth-access-token")
+        self.assertNotIn("x-goog-api-key", bearer)

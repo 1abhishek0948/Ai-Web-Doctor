@@ -230,17 +230,20 @@ SCAN_VIEWPORTS = (
     else _DEFAULT_VIEWPORTS
 )
 
-# AI visual analysis (Gemini).
-# Representative viewports always sent to the model; the deterministic scanner
-# also adds screenshots for viewports where it found important problems.
+# AI analysis (Gemini).
+# The AI is text-only by default (AI_SEND_IMAGES=False): screenshots drive
+# most input-token cost, so analysis runs on DOM structure + deterministic
+# measurements instead. AI_MAX_PROMPT_TOKENS caps the text prompt per request.
 GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
 GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-2.0-flash")
-GEMINI_TIMEOUT_MS = env.int("GEMINI_TIMEOUT_MS", default=45_000)
-GEMINI_MAX_RETRIES = env.int("GEMINI_MAX_RETRIES", default=1)
+GEMINI_TIMEOUT_MS = env.int("GEMINI_TIMEOUT_MS", default=120_000)
+GEMINI_MAX_RETRIES = env.int("GEMINI_MAX_RETRIES", default=2)
 AI_REPRESENTATIVE_VIEWPORTS = [(375, 812), (768, 1024), (1440, 900)]
 AI_IMAGE_MAX_WIDTH = env.int("AI_IMAGE_MAX_WIDTH", default=1024)
 AI_IMAGE_QUALITY = env.int("AI_IMAGE_QUALITY", default=70)
 AI_MAX_ISSUES = env.int("AI_MAX_ISSUES", default=20)
+AI_MAX_PROMPT_TOKENS = env.int("AI_MAX_PROMPT_TOKENS", default=25_000)
+AI_SEND_IMAGES = env.bool("AI_SEND_IMAGES", default=False)
 AI_ENABLED = env.bool("AI_ENABLED", default=True)
 
 # Structured logging (JSON lines). See config/logging_config.py.

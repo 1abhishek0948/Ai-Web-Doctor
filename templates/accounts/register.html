@@ -4,40 +4,134 @@
 {% block title %}Create an account — AI Web Doctor{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-md px-4 py-16">
-  <div class="rounded-2xl border border-slate-200 p-8 dark:border-slate-800">
-    <h1 class="text-xl font-bold text-slate-900 dark:text-slate-100">Create an account</h1>
-    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Sign up to save your scans and reports.</p>
+<div class="relative overflow-hidden">
+  <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+    <div class="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-brand-500/10 blur-3xl dark:bg-brand-400/10"></div>
+    <div class="absolute -bottom-24 right-1/4 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl dark:bg-sky-400/10"></div>
+  </div>
 
-    {% if form.non_field_errors %}
-      <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-        {{ form.non_field_errors }}
+  <div class="relative mx-auto max-w-md px-4 py-12 sm:py-20">
+    <div class="rounded-2xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50 sm:p-10 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/40">
+      <div class="flex flex-col items-center text-center">
+        <span class="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-500/30">
+          {% include "partials/icon.html" with name="stethoscope" class="h-7 w-7" %}
+        </span>
+        <h1 class="mt-5 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Create your account</h1>
+        <p class="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          Join AI Web Doctor to save your scans, track issues, and get AI-powered fix suggestions.
+        </p>
       </div>
-    {% endif %}
 
-    <form method="post" class="mt-6 space-y-4">
-      {% csrf_token %}
-      {% for field in form %}
+      {% if form.non_field_errors %}
+        <div class="mt-6 flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300" role="alert">
+          <span class="mt-0.5 shrink-0">
+            {% include "partials/icon.html" with name="alert-triangle" class="h-4 w-4" %}
+          </span>
+          <div>{{ form.non_field_errors }}</div>
+        </div>
+      {% endif %}
+
+      <form method="post" class="mt-8 space-y-5" novalidate x-data="{ show1: false, show2: false }">
+        {% csrf_token %}
+
         <div>
-          <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700 dark:text-slate-300">{{ field.label }}</label>
-          {{ field }}
-          {% if field.help_text %}
-            <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">{{ field.help_text|safe }}</p>
-          {% endif %}
-          {% for error in field.errors %}
-            <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ error }}</p>
+          <label for="id_username" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Username</label>
+          <div class="relative mt-1.5">
+            <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400 dark:text-slate-500">
+              {% include "partials/icon.html" with name="user-plus" class="h-4 w-4" %}
+            </span>
+            <input type="text" name="username" id="id_username" autocomplete="username" autocapitalize="none"
+                   maxlength="150" required autofocus
+                   value="{{ form.username.value|default:"" }}"
+                   aria-invalid="{% if form.username.errors %}true{% else %}false{% endif %}"
+                   class="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 {% if form.username.errors %}border-red-400 dark:border-red-800{% endif %}">
+          </div>
+          {% for error in form.username.errors %}
+            <p class="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">{{ error }}</p>
           {% endfor %}
         </div>
-      {% endfor %}
-      <button type="submit" class="w-full rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-brand-700">
-        Create account
-      </button>
-    </form>
 
-    <p class="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
-      Already have an account?
-      <a href="{% url 'login' %}" class="text-brand-600 hover:underline dark:text-brand-400">Log in</a>
-    </p>
+        <div>
+          <label for="id_password1" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
+          <div class="relative mt-1.5">
+            <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400 dark:text-slate-500">
+              {% include "partials/icon.html" with name="shield" class="h-4 w-4" %}
+            </span>
+            <input type="password" name="password1" id="id_password1" autocomplete="new-password" required
+                   :type="show1 ? 'text' : 'password'"
+                   aria-invalid="{% if form.password1.errors %}true{% else %}false{% endif %}"
+                   class="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-11 text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 {% if form.password1.errors %}border-red-400 dark:border-red-800{% endif %}">
+            <button type="button" @click="show1 = !show1"
+                    :aria-label="show1 ? 'Hide password' : 'Show password'"
+                    class="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
+              <span x-show="!show1">{% include "partials/icon.html" with name="eye" class="h-4 w-4" %}</span>
+              <span x-show="show1" x-cloak>{% include "partials/icon.html" with name="eye-off" class="h-4 w-4" %}</span>
+            </button>
+          </div>
+          {% for error in form.password1.errors %}
+            <p class="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">{{ error }}</p>
+          {% endfor %}
+          <ul class="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+            <li class="flex items-center gap-1.5">
+              {% include "partials/icon.html" with name="check" class="h-3.5 w-3.5 text-brand-500 dark:text-brand-400" %}
+              At least 8 characters
+            </li>
+            <li class="flex items-center gap-1.5">
+              {% include "partials/icon.html" with name="check" class="h-3.5 w-3.5 text-brand-500 dark:text-brand-400" %}
+              Not entirely numeric
+            </li>
+            <li class="flex items-center gap-1.5">
+              {% include "partials/icon.html" with name="check" class="h-3.5 w-3.5 text-brand-500 dark:text-brand-400" %}
+              Not too similar to your personal info
+            </li>
+          </ul>
+        </div>
+
+        <div>
+          <label for="id_password2" class="block text-sm font-medium text-slate-700 dark:text-slate-300">Confirm password</label>
+          <div class="relative mt-1.5">
+            <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400 dark:text-slate-500">
+              {% include "partials/icon.html" with name="shield" class="h-4 w-4" %}
+            </span>
+            <input type="password" name="password2" id="id_password2" autocomplete="new-password" required
+                   :type="show2 ? 'text' : 'password'"
+                   aria-invalid="{% if form.password2.errors %}true{% else %}false{% endif %}"
+                   class="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-11 text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 {% if form.password2.errors %}border-red-400 dark:border-red-800{% endif %}">
+            <button type="button" @click="show2 = !show2"
+                    :aria-label="show2 ? 'Hide password' : 'Show password'"
+                    class="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
+              <span x-show="!show2">{% include "partials/icon.html" with name="eye" class="h-4 w-4" %}</span>
+              <span x-show="show2" x-cloak>{% include "partials/icon.html" with name="eye-off" class="h-4 w-4" %}</span>
+            </button>
+          </div>
+          {% for error in form.password2.errors %}
+            <p class="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">{{ error }}</p>
+          {% endfor %}
+        </div>
+
+        <button type="submit"
+                class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-600 to-brand-700 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition-all hover:from-brand-700 hover:to-brand-800 hover:shadow-brand-600/35 focus:outline-none focus:ring-2 focus:ring-brand-500/50 active:scale-[0.99]">
+          {% include "partials/icon.html" with name="user-plus" class="h-4 w-4" %}
+          Create account
+        </button>
+      </form>
+
+      <div class="mt-8 flex items-center gap-3" role="separator">
+        <span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span>
+        <span class="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Already registered?</span>
+        <span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span>
+      </div>
+
+      <a href="{% url 'login' %}"
+         class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+        {% include "partials/icon.html" with name="log-in" class="h-4 w-4" %}
+        Log in to your account
+      </a>
+
+      <p class="mt-6 text-center text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+        By creating an account you agree to our terms of service and privacy policy.
+      </p>
+    </div>
   </div>
 </div>
 {% endblock %}

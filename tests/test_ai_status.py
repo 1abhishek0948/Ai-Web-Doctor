@@ -70,14 +70,18 @@ class AnalyzeScanStatusTests(TestCase):
         self.assertEqual(result.status, "unavailable")
         self.assertEqual(result.reason, "disabled_or_no_key")
 
-    def test_no_screenshots_is_unavailable(self):
+    def test_analysis_runs_without_screenshots(self):
+        class OkProvider(RaisingProvider):
+            def analyze_ui(self, payload: dict) -> str:
+                return json.dumps({"issues": []})
+
         with mock.patch.object(service, "_provider_available", return_value=True), (
-            mock.patch.object(service, "build_payload", return_value={"prompt": "x", "images": []})
-        ):
+            mock.patch.object(service, "get_provider", return_value=OkProvider(RuntimeError("unused")))
+        ), mock.patch.object(service, "build_payload", return_value={"prompt": "x", "images": []}):
             result = service.analyze_scan(self.scan)
-        self.assertFalse(result.available)
-        self.assertEqual(result.status, "unavailable")
-        self.assertEqual(result.reason, "no_screenshots")
+        self.assertTrue(result.available)
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.reason, "ok")
 
     def test_rate_limited_on_429(self):
         result = self._run(RaisingProvider(AIProviderError("Gemini returned HTTP 429: quota exceeded")))
@@ -207,18 +211,19 @@ class ResultsViewStatusTests(TestCase):
             "Check your Gemini API plan/billing and try again later.",
         )
 
-    def test_renders_rate_limited_banner(self):
+    def test_failure_banner_hidden(self):
         response = self.client.get(reverse("scans:scan-results", args=[self.scan.pk]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Rate limited")
-        self.assertContains(response, "quota")
+        self.assertNotContains(response, "AI visual analysis")
+        self.assertNotContains(response, "quota")
 
-    def test_renders_unavailable_banner(self):
+    def test_unavailable_banner_hidden(self):
         self.scan.ai_status = AIStatus.UNAVAILABLE
         self.scan.ai_message = "AI visual analysis unavailable."
         self.scan.save(update_fields=["ai_status", "ai_message"])
         response = self.client.get(reverse("scans:scan-results", args=[self.scan.pk]))
-        self.assertContains(response, "Unavailable")
+        self.assertNotContains(response, "AI visual analysis")
+        self.assertNotContains(response, "Unavailable")
 
     def test_renders_no_score_for_failed_scan(self):
         self.scan.status = ScanStatus.FAILED

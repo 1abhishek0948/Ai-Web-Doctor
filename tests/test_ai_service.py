@@ -99,22 +99,64 @@ class AIAnalysisTests(TestCase):
         self.assertFalse(result.available)
         self.assertEqual(self.scan.issues.count(), 0)
 
-    def test_missing_fields_unavailable(self):
+    def test_missing_description_issue_skipped(self):
         bad = dict(VALID_ISSUE)
-        del bad["severity"]
+        del bad["description"]
         _, result = self._run([json.dumps({"issues": [bad]})])
-        self.assertFalse(result.available)
+        self.assertTrue(result.available)
+        self.assertEqual(result.created, 0)
         self.assertEqual(self.scan.issues.count(), 0)
 
-    def test_invalid_severity_unavailable(self):
+    def test_invalid_severity_falls_back_to_info(self):
         bad = dict(VALID_ISSUE, severity="catastrophic")
         _, result = self._run([json.dumps({"issues": [bad]})])
-        self.assertFalse(result.available)
+        self.assertTrue(result.available)
+        self.assertEqual(result.created, 1)
+        self.assertEqual(self.scan.issues.get().severity, "info")
 
-    def test_invalid_category_unavailable(self):
+    def test_invalid_category_falls_back_to_ux(self):
         bad = dict(VALID_ISSUE, category="wizardry")
         _, result = self._run([json.dumps({"issues": [bad]})])
-        self.assertFalse(result.available)
+        self.assertTrue(result.available)
+        self.assertEqual(result.created, 1)
+        self.assertEqual(self.scan.issues.get().category, "ux")
+
+    def test_string_viewport_coerced(self):
+        bad = dict(VALID_ISSUE, viewport_width="375px", viewport_height="812px")
+        _, result = self._run([json.dumps({"issues": [bad]})])
+        self.assertTrue(result.available)
+        issue = self.scan.issues.get()
+        self.assertEqual(issue.viewport_width, 375)
+        self.assertEqual(issue.viewport_height, 812)
+
+    def test_extra_fields_ignored(self):
+        bad = dict(VALID_ISSUE, extra_field="whatever", type="visual")
+        _, result = self._run([json.dumps({"issues": [bad]})])
+        self.assertTrue(result.available)
+        self.assertEqual(result.created, 1)
+
+    def test_mixed_valid_and_invalid_issues(self):
+        bad = dict(VALID_ISSUE)
+        del bad["confidence"]
+        payload = json.dumps({"issues": [VALID_ISSUE, bad, VALID_ISSUE]})
+        _, result = self._run([payload])
+        self.assertTrue(result.available)
+        self.assertEqual(result.created, 1)
+        self.assertEqual(self.scan.issues.count(), 1)
+
+    def test_json_with_nested_braces_parsed(self):
+        raw = (
+            "Here is the analysis:\n```json\n"
+            '{"issues": [{"title": "Nested braces {in text}", '
+            '"severity": "low", "category": "ux", "viewport_width": 375, '
+            '"viewport_height": 812, "description": "Some description text.", '
+            '"likely_cause": "A cause.", "recommendation": "A fix.", '
+            '"confidence": 0.5}]}\n```'
+        )
+        _, result = self._run([raw])
+        self.assertTrue(result.available)
+        self.assertEqual(result.created, 1)
+        self.assertEqual(self.scan.issues.get().title, "Nested braces {in text}")
 
     def test_provider_error_unavailable(self):
         provider = FakeProvider([])
@@ -151,14 +193,60 @@ class AIAnalysisTests(TestCase):
         self.assertEqual(result.message, service.AI_UNAVAILABLE_MESSAGE)
         self.assertEqual(provider.calls, [])
 
-    def test_no_screenshots_unavailable(self):
-        provider = FakeProvider([])
+    def test_analysis_runs_without_screenshots(self):
+        provider = FakeProvider([json.dumps({"issues": [VALID_ISSUE]})])
         with mock.patch.object(service, "get_provider", return_value=provider), (
             mock.patch.object(service, "build_payload", return_value={"prompt": "x", "images": []})
         ):
             result = service.analyze_scan(self.scan)
-        self.assertFalse(result.available)
-        self.assertEqual(provider.calls, [])
+        self.assertTrue(result.available)
+        self.assertEqual(result.created, 1)
+        self.assertEqual(provider.calls, ["analyze_ui"])
+
+    def test_text_only_payload_by_default(self):
+        from apps.ai.providers.gemini import GeminiProvider
+
+        provider = GeminiProvider(api_key="AIza-test-key-xyz")
+        payload = {"prompt": "hello", "images": [{"mime_type": "image/jpeg", "data": "AAAA"}]}
+        with mock.patch.object(provider, "_request", return_value='{"issues": []}') as request:
+            provider.analyze_ui(payload)
+        body = request.call_args[0][0]
+        self.assertEqual(len(body["contents"][0]["parts"]), 1)
+        self.assertNotIn("inline_data", body["contents"][0]["parts"][0])
+
+    def test_images_included_when_enabled(self):
+        from apps.ai.providers.gemini import GeminiProvider
+
+        provider = GeminiProvider(api_key="AIza-test-key-xyz")
+        payload = {"prompt": "hello", "images": [{"mime_type": "image/jpeg", "data": "AAAA"}]}
+        with mock.patch.object(provider, "_request", return_value='{"issues": []}') as request, (
+            override_settings(AI_SEND_IMAGES=True)
+        ):
+            provider.analyze_ui(payload)
+        body = request.call_args[0][0]
+        self.assertEqual(len(body["contents"][0]["parts"]), 2)
+        self.assertIn("inline_data", body["contents"][0]["parts"][1])
+
+    def test_prompt_truncated_to_token_budget(self):
+        long_finding = dict(
+            VALID_ISSUE,
+            title="X" * 200,
+            description="Y" * 1000,
+            likely_cause="Z" * 600,
+            recommendation="W" * 600,
+        )
+        Issue.objects.create(
+            scan=self.scan,
+            title=long_finding["title"],
+            severity="high",
+            category="layout",
+            source=IssueSource.DETERMINISTIC,
+            description=long_finding["description"],
+        )
+        with override_settings(AI_MAX_PROMPT_TOKENS=100):
+            payload = service.build_payload(self.scan)
+        self.assertLessEqual(len(payload["prompt"]), 512 + 64)
+        self.assertIn("truncated to token budget", payload["prompt"])
 
     def test_ai_finding_combines_with_deterministic(self):
         existing = Issue.objects.create(

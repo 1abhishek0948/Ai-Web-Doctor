@@ -14,8 +14,27 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
 import django
+
+
+def _start_watchdog() -> None:
+    """Kill this process hard if the scan exceeds its deadline.
+
+    Playwright sync calls can hang forever when a renderer wedges (e.g. heavy
+    pages under memory pressure); a wedged call never returns, so no in-process
+    timeout can interrupt it. ``os._exit`` from a daemon thread is the only
+    guarantee — the parent web process and the stale-scan sweeper then mark
+    the scan failed instead of the container dying of memory exhaustion.
+    """
+    deadline_s = int(
+        os.environ.get("SCAN_MAX_DURATION_SECONDS") or os.environ.get("MAX_SCAN_DURATION") or 300
+    )
+    buffer_s = 120
+    timer = threading.Timer(deadline_s + buffer_s, os._exit, args=(1,))
+    timer.daemon = True
+    timer.start()
 
 
 def main() -> int:
@@ -33,6 +52,7 @@ def main() -> int:
         print("scan_id must be an integer", file=sys.stderr)
         return 2
 
+    _start_watchdog()
     execute_scan(scan_id)
     return 0
 

@@ -53,34 +53,52 @@ class GeminiProvider(AIProvider):
             raise AIProviderError("httpx is not installed.")
 
         url = f"{API_BASE}/models/{self.model}:generateContent"
-        # The API key travels in a header, never in the URL, so it cannot leak
-        # into log lines, error messages or request URLs.
-        headers = {"x-goog-api-key": self.api_key}
+        # Keys travel in headers, never in the URL, so they cannot leak into
+        # log lines, error messages or request URLs. Gemini API keys (AIza...
+        # and other key formats) go in the x-goog-api-key header; if that is
+        # rejected with 401/403 the request falls back to an OAuth-style
+        # Authorization: Bearer header (ya29... / AQ... tokens).
+        auth_variants = (
+            {"x-goog-api-key": self.api_key},
+            {"Authorization": f"Bearer {self.api_key}"},
+        )
         last_error: Exception | None = None
-        for attempt in range(self.max_retries + 1):
-            try:
-                response = httpx.post(
-                    url,
-                    headers=headers,
-                    json=body,
-                    timeout=httpx.Timeout(self.timeout_ms / 1000.0),
-                )
-            except httpx.TimeoutException as exc:
-                last_error = exc
-                logger.warning("Gemini request timed out (attempt %d)", attempt + 1)
-                continue
-            except httpx.HTTPError as exc:
-                last_error = exc
-                logger.warning("Gemini HTTP error (attempt %d): %s", attempt + 1, exc)
-                continue
+        for headers in auth_variants:
+            for attempt in range(self.max_retries + 1):
+                try:
+                    response = httpx.post(
+                        url,
+                        headers=headers,
+                        json=body,
+                        timeout=httpx.Timeout(self.timeout_ms / 1000.0),
+                    )
+                except httpx.TimeoutException as exc:
+                    last_error = exc
+                    logger.warning("Gemini request timed out (attempt %d)", attempt + 1)
+                    continue
+                except httpx.HTTPError as exc:
+                    last_error = exc
+                    logger.warning("Gemini HTTP error (attempt %d): %s", attempt + 1, exc)
+                    continue
 
-            if response.status_code == 200:
-                return self._extract_text(response.json())
-            last_error = AIProviderError(
-                f"Gemini returned HTTP {response.status_code}: "
-                f"{response.text[:200]}"
-            )
-            logger.warning("Gemini error response (attempt %d)", attempt + 1)
+                if response.status_code == 200:
+                    data = response.json()
+                    usage = data.get("usageMetadata") or {}
+                    logger.info(
+                        "Gemini usage: input_tokens=%s output_tokens=%s",
+                        usage.get("promptTokenCount", "?"),
+                        usage.get("candidatesTokenCount", "?"),
+                    )
+                    return self._extract_text(data)
+                last_error = AIProviderError(
+                    f"Gemini returned HTTP {response.status_code}: "
+                    f"{response.text[:200]}"
+                )
+                logger.warning("Gemini error response (attempt %d)", attempt + 1)
+                if response.status_code in (401, 403):
+                    # Unauthorized: try the next auth variant (e.g. Bearer
+                    # instead of the API-key header) rather than retrying.
+                    break
 
         raise AIProviderError(f"Gemini request failed: {last_error}")
 
@@ -100,15 +118,19 @@ class GeminiProvider(AIProvider):
             raise AIProviderError("No GEMINI_API_KEY configured.")
 
         parts: list[dict[str, Any]] = [{"text": payload["prompt"]}]
-        for image in payload.get("images", []):
-            parts.append(
-                {
-                    "inline_data": {
-                        "mime_type": image["mime_type"],
-                        "data": image["data"],
+        # Screenshots are the dominant input-token cost. They are only sent
+        # when AI_SEND_IMAGES is enabled; text-only analysis keeps requests
+        # in the low thousands of tokens.
+        if settings.AI_SEND_IMAGES:
+            for image in payload.get("images", []):
+                parts.append(
+                    {
+                        "inline_data": {
+                            "mime_type": image["mime_type"],
+                            "data": image["data"],
+                        }
                     }
-                }
-            )
+                )
 
         body = {
             "contents": [{"parts": parts}],
@@ -117,7 +139,7 @@ class GeminiProvider(AIProvider):
         logger.info(
             "Calling Gemini model %s with %d image(s) and %d text prompt chars",
             self.model,
-            len(payload.get("images", [])),
+            len(payload.get("images", [])) if settings.AI_SEND_IMAGES else 0,
             len(payload.get("prompt", "")),
         )
         return self._request(body)

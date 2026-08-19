@@ -5,9 +5,13 @@ organizes them into six groups whose weights sum to 100. This module is the
 single source of truth for that mapping so the dashboard, scoring service and
 templates never hardcode category lists.
 
-* ``DETERMINISTIC_CATEGORIES`` — categories the Playwright checks can report.
-* ``AI_ONLY_CATEGORIES`` — categories only detectable by visual (AI) reasoning.
-  A zero-count card for one of these means "not analyzed" unless AI ran.
+* ``DETERMINISTIC_CATEGORIES`` — categories the deterministic checks cover.
+  Every category is now analyzed on every scan: the Playwright checks
+  (``scanner.responsive``, ``scanner.accessibility``, ``scanner.visual``)
+  report all ten of them, so a zero-count card means "clean", not "unchecked".
+* ``AI_ONLY_CATEGORIES`` — kept as an empty set for backwards compatibility;
+  AI analysis is now an optional enrichment source that merges extra findings
+  into the same categories.
 * ``CATEGORY_TO_GROUP`` — raw category -> scoring group.
 """
 
@@ -37,12 +41,13 @@ CATEGORY_TO_GROUP = {
     "ux": "ux",
 }
 
-# Categories only detectable by visual (AI) reasoning; deterministic checks can
-# never report them, so a zero-count card is "not analyzed yet" when AI is off.
-AI_ONLY_CATEGORIES = {"spacing", "color", "typography", "interaction", "performance", "ux"}
+# No category requires AI anymore: deterministic checks (responsive,
+# accessibility, visual) cover all ten, so every category is analyzed on every
+# scan. AI findings remain an optional enrichment source for any category.
+AI_ONLY_CATEGORIES: frozenset[str] = frozenset()
 
-# Categories the deterministic scanner can report on its own.
-DETERMINISTIC_CATEGORIES = {"responsive", "layout", "navigation", "accessibility"}
+# Categories the deterministic scanner covers on its own.
+DETERMINISTIC_CATEGORIES = frozenset(CATEGORY_TO_GROUP.keys())
 
 # Backwards-compatible alias used by earlier code paths.
 VISUAL_CATEGORIES = AI_ONLY_CATEGORIES
