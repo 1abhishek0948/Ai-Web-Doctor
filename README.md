@@ -358,7 +358,7 @@ See `.env.example` for the full annotated list. Highlights:
 | `SCAN_BLOCK_HEAVY_RESOURCES` | `True` | Abort fonts/media/tracker requests during scans |
 | `SCAN_BLOCK_IMAGES` | `False` | Block all images via CDP during scans (on in production — large memory savings on media-heavy sites) |
 | `SCAN_SUBPROCESS_MODE` | `False` | Run scans in a short-lived subprocess (recommended in production) |
-| `RATE_LIMIT_ANONYMOUS_SCANS_PER_DAY` | `3` | Daily quota per IP (anonymous) |
+| `RATE_LIMIT_ANONYMOUS_SCANS_PER_DAY` | `20` | Daily quota per IP (anonymous) |
 | `RATE_LIMIT_AUTHED_SCANS_PER_DAY` | `10` | Daily quota per IP (logged in) |
 | `TRUST_X_FORWARDED_FOR` | `False` | Only `True` behind a trusted reverse proxy |
 | `LOG_LEVEL` | `INFO` | Root log level |

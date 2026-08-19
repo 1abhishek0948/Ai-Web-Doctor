@@ -175,7 +175,7 @@ MAX_SCREENSHOT_SIZE = env.int("MAX_SCREENSHOT_SIZE", default=8 * 1024 * 1024)
 MAX_AI_REQUEST_SIZE = env.int("MAX_AI_REQUEST_SIZE", default=4 * 1024 * 1024)
 
 # Per-day scan quota (configurable). Anonymous users share a quota keyed by IP.
-RATE_LIMIT_ANONYMOUS_SCANS_PER_DAY = env.int("RATE_LIMIT_ANONYMOUS_SCANS_PER_DAY", default=3)
+RATE_LIMIT_ANONYMOUS_SCANS_PER_DAY = env.int("RATE_LIMIT_ANONYMOUS_SCANS_PER_DAY", default=20)
 RATE_LIMIT_AUTHED_SCANS_PER_DAY = env.int("RATE_LIMIT_AUTHED_SCANS_PER_DAY", default=10)
 # When the app runs behind a trusted proxy, allow the first X-Forwarded-For
 # entry to be treated as the client IP for rate limiting.
