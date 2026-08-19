@@ -21,7 +21,7 @@ or paste credentials into the repository.
 | `CELERY_RESULT_BACKEND` | *(optional)* | Defaults to `REDIS_URL`. |
 | `CELERY_TASK_ALWAYS_EAGER` | `False` | Do not run scans inline; let the Celery worker execute them. |
 | `GEMINI_API_KEY` | `<your key>` | Google Gemini API key. |
-| `GEMINI_MODEL` | `gemini-3.6-flash` | Model used for AI visual analysis. |
+| `GEMINI_MODEL` | `gemini-2.0-flash` | Model used for AI visual analysis. |
 | `AI_ENABLED` | `True` | Set `False` to disable AI analysis entirely. |
 | `TRUST_X_FORWARDED_FOR` | `True` | Required behind Render's proxy so rate limits key on the real client IP. |
 | `RATE_LIMIT_ANONYMOUS_SCANS_PER_DAY` | `3` | Optional; defaults exist for all scan limits. |

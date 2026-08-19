@@ -526,6 +526,17 @@ def _is_rate_limited(error: Exception | None) -> bool:
     )
 
 
+def _is_timeout(error: Exception | None) -> bool:
+    """True when a provider error is due to a timeout."""
+    lowered = (str(error) or "").lower()
+    return (
+        "timeout" in lowered
+        or "timed out" in lowered
+        or "readtimeout" in lowered
+        or "connecttimeout" in lowered
+    )
+
+
 def analyze_scan(scan) -> AIAnalysisResult:
     """Run AI visual analysis for a scan and merge its findings.
 
@@ -555,6 +566,7 @@ def analyze_scan(scan) -> AIAnalysisResult:
         except AIProviderError as exc:
             last_error = exc
             logger.warning("AI provider error on attempt %d: %s", attempt + 1, exc)
+            break
         except (ValueError, ValidationError) as exc:
             last_error = exc
             logger.warning("Invalid AI response on attempt %d: %s", attempt + 1, exc)
@@ -567,13 +579,20 @@ def analyze_scan(scan) -> AIAnalysisResult:
             "ai.error",
             scan_id=scan.pk,
             reason=str(last_error or "unknown"),
-            attempts=attempts,
+            attempts=attempt + 1,
         )
         if _is_rate_limited(last_error):
             return AIAnalysisResult(
                 available=False,
                 status="rate_limited",
                 reason="provider_rate_limited",
+                message=_friendly_provider_error(str(last_error or "")),
+            )
+        if _is_timeout(last_error):
+            return AIAnalysisResult(
+                available=False,
+                status="failed",
+                reason="provider_timeout",
                 message=_friendly_provider_error(str(last_error or "")),
             )
         return AIAnalysisResult(
@@ -661,10 +680,7 @@ def _build_fix_payload(issue: Issue) -> dict[str, Any]:
                 quality=settings.AI_IMAGE_QUALITY,
             )
             payload["images"].append(
-                {
-                    "mime_type": "image/jpeg",
-                    "data": base64.b64encode(optimized).decode("ascii"),
-                }
+                encode_image_bytes(optimized, mime_type="image/jpeg")
             )
         except Exception:  # noqa: BLE001
             logger.warning("Could not attach screenshot for fix on issue %s.", issue.pk)
@@ -687,15 +703,35 @@ def _validate_fix(raw: str) -> AIFix:
 def _friendly_provider_error(message: str) -> str:
     """Turn a raw provider error into a developer-facing hint."""
     lowered = (message or "").lower()
-    if "429" in lowered or "quota" in lowered:
+    if "429" in lowered or "quota" in lowered or "resource_exhausted" in lowered:
         return (
             "The AI provider is rate-limited (quota exceeded). "
             "Check your Gemini API plan/billing and try again later."
         )
-    if "timeout" in lowered or "timed out" in lowered:
+    if "timeout" in lowered or "timed out" in lowered or "readtimeout" in lowered or "connecttimeout" in lowered:
         return "The AI provider timed out. Please try again."
-    if "unauthorized" in lowered or "401" in lowered or "invalid api key" in lowered:
+    if (
+        "unauthorized" in lowered
+        or "401" in lowered
+        or "invalid api key" in lowered
+        or "api_key_invalid" in lowered
+        or "api key not valid" in lowered
+    ):
         return "The AI provider rejected the API key. Check GEMINI_API_KEY."
+    if (
+        "403" in lowered
+        or "permission_denied" in lowered
+        or "permission denied" in lowered
+        or "has not been used in project" in lowered
+    ):
+        return (
+            "The AI provider returned permission denied (HTTP 403). "
+            "Ensure Generative Language API is enabled in Google Cloud console and key restrictions allow this request."
+        )
+    if "404" in lowered or "not found" in lowered:
+        return "The AI model was not found (HTTP 404). Check GEMINI_MODEL setting (e.g. use 'gemini-2.0-flash')."
+    if message:
+        return f"The AI could not be reached ({message}). Please try again."
     return "The AI could not be reached. Please try again."
 
 
@@ -714,26 +750,27 @@ def generate_fix(issue: Issue) -> FixResult:
 
     payload = _build_fix_payload(issue)
     provider = get_provider()
-    attempts = settings.GEMINI_MAX_RETRIES + 1
-    last_provider_error = ""
 
+    try:
+        raw = provider.generate_fix(payload)
+    except AIProviderError as exc:
+        last_provider_error = str(exc)
+        logger.warning("Fix provider error: %s", exc)
+        log_event(
+            "ai.fix_error",
+            level=logging.WARNING,
+            issue_id=issue.pk,
+            reason="provider_unreachable",
+        )
+        return FixResult(ok=False, error=_friendly_provider_error(last_provider_error))
+
+    attempts = settings.GEMINI_MAX_RETRIES + 1
     for attempt in range(attempts):
-        try:
-            raw = provider.generate_fix(payload)
-        except AIProviderError as exc:
-            last_provider_error = str(exc)
-            logger.warning(
-                "Fix provider error on attempt %d: %s", attempt + 1, exc
-            )
-            if attempt < attempts - 1:
-                continue
-            log_event(
-                "ai.fix_error",
-                level=logging.WARNING,
-                issue_id=issue.pk,
-                reason="provider_unreachable",
-            )
-            return FixResult(ok=False, error=_friendly_provider_error(last_provider_error))
+        if attempt > 0:
+            try:
+                raw = provider.generate_fix(payload)
+            except AIProviderError as exc:
+                return FixResult(ok=False, error=_friendly_provider_error(str(exc)))
 
         try:
             fix = _validate_fix(raw)

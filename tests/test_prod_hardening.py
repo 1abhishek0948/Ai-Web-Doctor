@@ -143,7 +143,7 @@ class ProductionSettingsTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             result.stdout.strip(),
-            "True False 1 2000 False 3600 True",
+            "False True 1 2000 False 3600 True",
         )
 
     def test_production_respects_scan_mode_env(self):

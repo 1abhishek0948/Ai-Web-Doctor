@@ -93,7 +93,7 @@ services:
         sync: false # Prompts the user to input their Gemini API key on deployment
 
       - key: GEMINI_MODEL
-        value: "gemini-3.6-flash" # Default recommended model (matches .env.example)
+        value: "gemini-2.0-flash" # Default recommended model (matches .env.example)
 
       - key: TRUST_X_FORWARDED_FOR
         value: "True" # Required behind Render's load balancer proxy for rate limits

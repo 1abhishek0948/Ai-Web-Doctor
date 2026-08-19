@@ -257,7 +257,7 @@ SCAN_VIEWPORTS = (
 # measurements instead. AI_MAX_PROMPT_TOKENS caps the text prompt per request.
 GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
 GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-2.0-flash")
-GEMINI_TIMEOUT_MS = env.int("GEMINI_TIMEOUT_MS", default=120_000)
+GEMINI_TIMEOUT_MS = env.int("GEMINI_TIMEOUT_MS", default=30_000)
 GEMINI_MAX_RETRIES = env.int("GEMINI_MAX_RETRIES", default=2)
 AI_REPRESENTATIVE_VIEWPORTS = [(375, 812), (768, 1024), (1440, 900)]
 AI_IMAGE_MAX_WIDTH = env.int("AI_IMAGE_MAX_WIDTH", default=1024)

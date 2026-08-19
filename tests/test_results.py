@@ -120,11 +120,12 @@ class IssueFixViewTests(TestCase):
         self.assertContains(response, "suggestion only")
 
     def test_fix_error_partial(self):
-        result = FixResult(ok=False, error="The AI could not be reached. Please try again.")
+        result = FixResult(ok=False, error="The AI provider timed out. Please try again.")
         with mock.patch("apps.scans.views.generate_fix", return_value=result):
             response = self.client.post(self.url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "could not be reached")
+        self.assertContains(response, "The AI provider timed out. Please try again.")
+        self.assertContains(response, "Try Again")
 
     def test_fix_requires_post(self):
         response = self.client.get(self.url)

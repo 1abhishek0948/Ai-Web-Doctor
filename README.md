@@ -339,8 +339,8 @@ See `.env.example` for the full annotated list. Highlights:
 | `SCAN_WORKER_MODE` | `True` (prod) / `False` (dev) | Runs scans on the dedicated DB-polling worker instance |
 | `SECRET_KEY` | `change-me-in-production` | Django secret (≥50 chars in prod) |
 | `GEMINI_API_KEY` | empty | Gemini API key (AI analysis is optional) |
-| `GEMINI_MODEL` | `gemini-3.6-flash` | Model used for analysis/fixes (recommended: `gemini-3.6-flash`) |
-| `GEMINI_TIMEOUT_MS` | `120000` | Per-attempt Gemini request timeout |
+| `GEMINI_MODEL` | `gemini-2.0-flash` | Model used for analysis/fixes (recommended: `gemini-2.0-flash`) |
+| `GEMINI_TIMEOUT_MS` | `30000` | Per-attempt Gemini request timeout |
 | `GEMINI_MAX_RETRIES` | `2` | Retries before analysis/fix fails |
 | `AI_SEND_IMAGES` | `False` | Text-only analysis by default; set `True` to attach screenshots (much higher token usage) |
 | `AI_MAX_PROMPT_TOKENS` | `25000` | Hard cap on prompt text tokens per request |

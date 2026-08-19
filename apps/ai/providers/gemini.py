@@ -34,13 +34,18 @@ class GeminiProvider(AIProvider):
         timeout_ms: int | None = None,
         max_retries: int | None = None,
     ) -> None:
-        self.api_key = api_key if api_key is not None else settings.GEMINI_API_KEY
-        self.model = model if model is not None else settings.GEMINI_MODEL
+        raw_key = api_key if api_key is not None else getattr(settings, "GEMINI_API_KEY", "")
+        self.api_key = raw_key.strip().strip('"\'') if raw_key else ""
+
+        raw_model = model if model is not None else getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash")
+        model_str = raw_model.strip().strip('"\'') if raw_model else "gemini-2.0-flash"
+        self.model = model_str.removeprefix("models/").lstrip("/") if model_str else "gemini-2.0-flash"
+
         self.timeout_ms = (
-            timeout_ms if timeout_ms is not None else settings.GEMINI_TIMEOUT_MS
+            timeout_ms if timeout_ms is not None else getattr(settings, "GEMINI_TIMEOUT_MS", 30_000)
         )
         self.max_retries = (
-            max_retries if max_retries is not None else settings.GEMINI_MAX_RETRIES
+            max_retries if max_retries is not None else getattr(settings, "GEMINI_MAX_RETRIES", 2)
         )
 
     def is_available(self) -> bool:
@@ -53,17 +58,19 @@ class GeminiProvider(AIProvider):
             raise AIProviderError("httpx is not installed.")
 
         url = f"{API_BASE}/models/{self.model}:generateContent"
-        # Keys travel in headers, never in the URL, so they cannot leak into
-        # log lines, error messages or request URLs. Gemini API keys (AIza...
-        # and other key formats) go in the x-goog-api-key header; if that is
-        # rejected with 401/403 the request falls back to an OAuth-style
-        # Authorization: Bearer header (ya29... / AQ... tokens).
+        # Determine authentication header variant order based on key format:
+        # Standard Gemini API keys (AIza...) use x-goog-api-key.
+        # OAuth access tokens (ya29... / AQ...) use Authorization: Bearer.
         auth_variants = (
             {"x-goog-api-key": self.api_key},
             {"Authorization": f"Bearer {self.api_key}"},
         )
+
+        primary_error: Exception | None = None
         last_error: Exception | None = None
-        for headers in auth_variants:
+
+        for idx, headers in enumerate(auth_variants):
+            should_try_next_auth = False
             for attempt in range(self.max_retries + 1):
                 try:
                     response = httpx.post(
@@ -73,11 +80,13 @@ class GeminiProvider(AIProvider):
                         timeout=httpx.Timeout(self.timeout_ms / 1000.0),
                     )
                 except httpx.TimeoutException as exc:
-                    last_error = exc
-                    logger.warning("Gemini request timed out (attempt %d)", attempt + 1)
+                    detail = str(exc).strip() or "timed out"
+                    last_error = AIProviderError(f"Gemini request timed out: {detail}")
+                    logger.warning("Gemini request timed out (attempt %d): %s", attempt + 1, detail)
                     continue
                 except httpx.HTTPError as exc:
-                    last_error = exc
+                    detail = str(exc).strip() or "connection error"
+                    last_error = AIProviderError(f"Gemini HTTP error: {detail}")
                     logger.warning("Gemini HTTP error (attempt %d): %s", attempt + 1, exc)
                     continue
 
@@ -90,17 +99,30 @@ class GeminiProvider(AIProvider):
                         usage.get("candidatesTokenCount", "?"),
                     )
                     return self._extract_text(data)
-                last_error = AIProviderError(
+
+                err_msg = (
                     f"Gemini returned HTTP {response.status_code}: "
                     f"{response.text[:200]}"
                 )
-                logger.warning("Gemini error response (attempt %d)", attempt + 1)
+                last_error = AIProviderError(err_msg)
+                logger.warning("Gemini error response (attempt %d): HTTP %d", attempt + 1, response.status_code)
+
+                # For standard AIza... API keys, Bearer fallback will only return a misleading 401.
+                # Stop fallback for AIza keys to preserve the true error response.
                 if response.status_code in (401, 403):
-                    # Unauthorized: try the next auth variant (e.g. Bearer
-                    # instead of the API-key header) rather than retrying.
+                    if self.api_key.startswith("AIza"):
+                        raise last_error
+                    if response.status_code == 401:
+                        should_try_next_auth = True
                     break
 
-        raise AIProviderError(f"Gemini request failed: {last_error}")
+            if idx == 0:
+                primary_error = last_error
+
+            if not should_try_next_auth:
+                break
+
+        raise AIProviderError(f"Gemini request failed: {primary_error or last_error}")
 
     @staticmethod
     def _extract_text(data: dict[str, Any]) -> str:

@@ -208,3 +208,57 @@ class GeminiApiKeyTests(TestCase):
         bearer = calls[1].kwargs["headers"]
         self.assertEqual(bearer["Authorization"], "Bearer AQ.oauth-access-token")
         self.assertNotIn("x-goog-api-key", bearer)
+
+    def test_api_key_and_model_sanitization(self):
+        provider = GeminiProvider(
+            api_key=' "AIza-super-secret-key-xyz" \n',
+            model=' "models/gemini-2.0-flash" ',
+        )
+        self.assertEqual(provider.api_key, "AIza-super-secret-key-xyz")
+        self.assertEqual(provider.model, "gemini-2.0-flash")
+
+    def test_aiza_api_key_does_not_fallback_to_bearer_on_403(self):
+        from apps.ai.providers import AIProviderError
+
+        provider = GeminiProvider(api_key="AIza-super-secret-key-xyz")
+        error_response = mock.Mock(
+            status_code=403,
+            text='{"error": {"code": 403, "message": "Generative Language API has not been used in project before or it is disabled."}}',
+        )
+        with mock.patch("httpx.post", return_value=error_response) as post:
+            with self.assertRaises(AIProviderError) as cm:
+                provider._request({"contents": []})
+
+        self.assertIn("HTTP 403", str(cm.exception))
+        self.assertIn("Generative Language API has not been used", str(cm.exception))
+        # Should only call once (no Bearer fallback for AIza keys)
+        self.assertEqual(post.call_count, 1)
+
+    def test_friendly_error_messages(self):
+        from apps.ai.service import _friendly_provider_error
+
+        err_403 = _friendly_provider_error("Gemini returned HTTP 403: Generative Language API is disabled")
+        self.assertIn("permission denied (HTTP 403)", err_403)
+
+        err_404 = _friendly_provider_error("Gemini returned HTTP 404: models/gemini-3.6-flash is not found")
+        self.assertIn("model was not found (HTTP 404)", err_404)
+
+        err_401 = _friendly_provider_error("Gemini returned HTTP 401: API key not valid")
+        self.assertIn("rejected the API key", err_401)
+
+        err_timeout = _friendly_provider_error("Gemini request timed out: timed out")
+        self.assertEqual(err_timeout, "The AI provider timed out. Please try again.")
+
+    def test_httpx_timeout_exception_handling(self):
+        import httpx
+        from apps.ai.providers import AIProviderError
+
+        provider = GeminiProvider(api_key="valid-key", max_retries=1)
+        with mock.patch("httpx.post", side_effect=httpx.TimeoutException("")) as post:
+            with self.assertRaises(AIProviderError) as cm:
+                provider._request({"contents": []})
+
+        self.assertIn("timed out", str(cm.exception))
+        # With max_retries=1, it attempts twice on primary auth and stops without secondary auth fallback on timeouts
+        self.assertEqual(post.call_count, 2)
+
