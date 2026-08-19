@@ -11,14 +11,14 @@ if not SECRET_KEY:  # noqa: F405
     raise RuntimeError("SECRET_KEY must be set in production.")
 
 # Production-safe scan defaults. Concurrency and idle-wait are hard-forced
-# below; scan *execution mode* is NOT: the deployment (render.yaml) runs scans
-# on a dedicated DB-polling worker instance, and the web process must never
-# spawn Chromium. Forcing subprocess mode here would launch Chromium on the
-# web instance and OOM-kill the free-tier container mid-scan.
-SCAN_SUBPROCESS_MODE = env.bool("SCAN_SUBPROCESS_MODE", default=False)
-# Production default: scans run on the dedicated worker service, which polls
-# Postgres for QUEUED scans. No Redis/message broker required.
-SCAN_WORKER_MODE = env.bool("SCAN_WORKER_MODE", default=True)
+# below. Render's Free Tier no longer supports background workers, so scans
+# run in a short-lived subprocess on the web instance. The subprocess isolates
+# Chromium: its memory is fully released after each scan, and an OOM in the
+# child never kills gunicorn. Memory-saving flags (CHROMIUM_LOW_MEMORY_MODE,
+# SCAN_BLOCK_IMAGES) keep peak RSS under the 512 MB container limit.
+SCAN_SUBPROCESS_MODE = env.bool("SCAN_SUBPROCESS_MODE", default=True)
+# Disabled by default: no dedicated worker service on the free tier.
+SCAN_WORKER_MODE = env.bool("SCAN_WORKER_MODE", default=False)
 MAX_CONCURRENT_SCANS = 1
 SCAN_NETWORK_IDLE_TIMEOUT_MS = 2_000
 
