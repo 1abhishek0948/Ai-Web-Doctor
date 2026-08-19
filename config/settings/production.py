@@ -20,7 +20,7 @@ SCAN_SUBPROCESS_MODE = env.bool("SCAN_SUBPROCESS_MODE", default=True)
 # Disabled by default: no dedicated worker service on the free tier.
 SCAN_WORKER_MODE = env.bool("SCAN_WORKER_MODE", default=False)
 MAX_CONCURRENT_SCANS = 1
-SCAN_NETWORK_IDLE_TIMEOUT_MS = 2_000
+SCAN_NETWORK_IDLE_TIMEOUT_MS = 1_500
 
 # Production should use a real mail backend (SMTP) configured via env vars.
 EMAIL_BACKEND = env(

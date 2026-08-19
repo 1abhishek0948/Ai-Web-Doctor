@@ -26,7 +26,8 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     # glibc malloc returns memory to the OS (lower RSS on small containers)
     PYTHONMALLOC=malloc \
-    MALLOC_ARENA_MAX=2
+    MALLOC_ARENA_MAX=2 \
+    MALLOC_TRIM_THRESHOLD_=65536
 
 WORKDIR /app
 
@@ -61,4 +62,4 @@ RUN SECRET_KEY=build-time-only-not-for-production python manage.py collectstatic
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 1 --timeout 120 --max-requests 50"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 1 --timeout 120 --max-requests 50 --max-requests-jitter 10"]

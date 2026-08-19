@@ -66,10 +66,10 @@ services:
         value: "[[390,844],[1440,900]]" # Mobile + desktop: 2 viewports to fit free-tier CPU/RAM
 
       - key: MAX_SCAN_DURATION
-        value: "600" # Free-tier CPU is throttled; give scans a 10-minute budget
+        value: "300" # 5-minute time budget for free-tier 2-viewport scans
 
       - key: SCAN_MAX_DURATION_SECONDS
-        value: "600" # Hard kill deadline for the scan subprocess (watchdog)
+        value: "300" # Hard kill deadline for the scan subprocess (watchdog)
 
       - key: MAX_SCREENSHOTS
         value: "4" # Each capture is a transient PNG spike; 4 keeps memory low
@@ -78,10 +78,16 @@ services:
         value: "5242880"
 
       - key: SCAN_NETWORK_IDLE_TIMEOUT_MS
-        value: "2000" # Short bounded idle wait per viewport
+        value: "1500" # Fast 1.5s bounded idle wait per viewport
 
       - key: CHROMIUM_LOW_MEMORY_MODE
         value: "True" # Capped V8 heaps + no background services
+
+      - key: CHROMIUM_V8_HEAP_MB
+        value: "144" # 144MB V8 heap cap to fit strictly inside 512MB RAM container
+
+      - key: SCAN_DOM_SNAPSHOT_LIMIT
+        value: "80" # Cap DOM node elements to keep prompt size & RAM low
 
       - key: SCAN_BLOCK_HEAVY_RESOURCES
         value: "True" # Block fonts/media/trackers via CDP during scans
@@ -94,6 +100,12 @@ services:
 
       - key: GEMINI_MODEL
         value: "gemini-2.0-flash" # Default recommended model (matches .env.example)
+
+      - key: GEMINI_TIMEOUT_MS
+        value: "60000" # 60s timeout to prevent AI provider timeout errors
+
+      - key: AI_MAX_PROMPT_TOKENS
+        value: "15000" # Lean prompt cap to accelerate Gemini response time
 
       - key: TRUST_X_FORWARDED_FOR
         value: "True" # Required behind Render's load balancer proxy for rate limits

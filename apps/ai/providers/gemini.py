@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from typing import Any
 
 from django.conf import settings
@@ -42,7 +43,7 @@ class GeminiProvider(AIProvider):
         self.model = model_str.removeprefix("models/").lstrip("/") if model_str else "gemini-2.0-flash"
 
         self.timeout_ms = (
-            timeout_ms if timeout_ms is not None else getattr(settings, "GEMINI_TIMEOUT_MS", 30_000)
+            timeout_ms if timeout_ms is not None else getattr(settings, "GEMINI_TIMEOUT_MS", 60_000)
         )
         self.max_retries = (
             max_retries if max_retries is not None else getattr(settings, "GEMINI_MAX_RETRIES", 2)
@@ -57,70 +58,89 @@ class GeminiProvider(AIProvider):
         except ImportError:  # pragma: no cover
             raise AIProviderError("httpx is not installed.")
 
-        url = f"{API_BASE}/models/{self.model}:generateContent"
-        # Determine authentication header variant order based on key format:
-        # Standard Gemini API keys (AIza...) use x-goog-api-key.
-        # OAuth access tokens (ya29... / AQ...) use Authorization: Bearer.
+        # Candidate models list starting with primary model
+        fallback_candidates = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+        models_to_try = [self.model]
+        for candidate in fallback_candidates:
+            if candidate not in models_to_try:
+                models_to_try.append(candidate)
+
         auth_variants = (
             {"x-goog-api-key": self.api_key},
             {"Authorization": f"Bearer {self.api_key}"},
         )
 
+        read_timeout_s = max(10.0, float(self.timeout_ms) / 1000.0)
+        httpx_timeout = httpx.Timeout(read=read_timeout_s, connect=10.0, write=30.0, pool=10.0)
+
         primary_error: Exception | None = None
         last_error: Exception | None = None
 
-        for idx, headers in enumerate(auth_variants):
-            should_try_next_auth = False
-            for attempt in range(self.max_retries + 1):
-                try:
-                    response = httpx.post(
-                        url,
-                        headers=headers,
-                        json=body,
-                        timeout=httpx.Timeout(self.timeout_ms / 1000.0),
+        for model_idx, target_model in enumerate(models_to_try):
+            url = f"{API_BASE}/models/{target_model}:generateContent"
+            for auth_idx, headers in enumerate(auth_variants):
+                should_try_next_auth = False
+                for attempt in range(self.max_retries + 1):
+                    if attempt > 0:
+                        time.sleep(1.0 * attempt)
+                    try:
+                        response = httpx.post(
+                            url,
+                            headers=headers,
+                            json=body,
+                            timeout=httpx_timeout,
+                        )
+                    except httpx.TimeoutException as exc:
+                        detail = str(exc).strip() or "timed out"
+                        last_error = AIProviderError(f"Gemini request timed out on model {target_model}: {detail}")
+                        logger.warning(
+                            "Gemini model %s timed out (attempt %d): %s",
+                            target_model, attempt + 1, detail
+                        )
+                        continue
+                    except httpx.HTTPError as exc:
+                        detail = str(exc).strip() or "connection error"
+                        last_error = AIProviderError(f"Gemini HTTP error on model {target_model}: {detail}")
+                        logger.warning(
+                            "Gemini model %s HTTP error (attempt %d): %s",
+                            target_model, attempt + 1, exc
+                        )
+                        continue
+
+                    if response.status_code == 200:
+                        data = response.json()
+                        usage = data.get("usageMetadata") or {}
+                        logger.info(
+                            "Gemini usage (%s): input_tokens=%s output_tokens=%s",
+                            target_model,
+                            usage.get("promptTokenCount", "?"),
+                            usage.get("candidatesTokenCount", "?"),
+                        )
+                        return self._extract_text(data)
+
+                    err_msg = (
+                        f"Gemini model {target_model} returned HTTP {response.status_code}: "
+                        f"{response.text[:200]}"
                     )
-                except httpx.TimeoutException as exc:
-                    detail = str(exc).strip() or "timed out"
-                    last_error = AIProviderError(f"Gemini request timed out: {detail}")
-                    logger.warning("Gemini request timed out (attempt %d): %s", attempt + 1, detail)
-                    continue
-                except httpx.HTTPError as exc:
-                    detail = str(exc).strip() or "connection error"
-                    last_error = AIProviderError(f"Gemini HTTP error: {detail}")
-                    logger.warning("Gemini HTTP error (attempt %d): %s", attempt + 1, exc)
-                    continue
-
-                if response.status_code == 200:
-                    data = response.json()
-                    usage = data.get("usageMetadata") or {}
-                    logger.info(
-                        "Gemini usage: input_tokens=%s output_tokens=%s",
-                        usage.get("promptTokenCount", "?"),
-                        usage.get("candidatesTokenCount", "?"),
+                    last_error = AIProviderError(err_msg)
+                    logger.warning(
+                        "Gemini model %s error response (attempt %d): HTTP %d",
+                        target_model, attempt + 1, response.status_code
                     )
-                    return self._extract_text(data)
 
-                err_msg = (
-                    f"Gemini returned HTTP {response.status_code}: "
-                    f"{response.text[:200]}"
-                )
-                last_error = AIProviderError(err_msg)
-                logger.warning("Gemini error response (attempt %d): HTTP %d", attempt + 1, response.status_code)
+                    if response.status_code in (401, 403):
+                        if self.api_key.startswith("AIza"):
+                            # Auth rejected explicitly for AIza key, don't try Bearer or other models
+                            raise last_error
+                        if response.status_code == 401:
+                            should_try_next_auth = True
+                        break
 
-                # For standard AIza... API keys, Bearer fallback will only return a misleading 401.
-                # Stop fallback for AIza keys to preserve the true error response.
-                if response.status_code in (401, 403):
-                    if self.api_key.startswith("AIza"):
-                        raise last_error
-                    if response.status_code == 401:
-                        should_try_next_auth = True
+                if model_idx == 0 and auth_idx == 0:
+                    primary_error = last_error
+
+                if not should_try_next_auth:
                     break
-
-            if idx == 0:
-                primary_error = last_error
-
-            if not should_try_next_auth:
-                break
 
         raise AIProviderError(f"Gemini request failed: {primary_error or last_error}")
 

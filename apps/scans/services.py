@@ -15,6 +15,7 @@ The web process never runs the scan synchronously.
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import logging
@@ -352,6 +353,7 @@ def execute_scan(scan_id: int) -> None:
         issues=scan.issues.count(),
         duration_ms=int((time.monotonic() - started) * 1000),
     )
+    gc.collect()
 
 
 def _dispatch_subprocess(scan: Scan) -> None:

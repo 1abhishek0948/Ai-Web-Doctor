@@ -10,6 +10,7 @@ clear message is surfaced instead.
 from __future__ import annotations
 
 import base64
+import gc
 import json
 import logging
 import re
@@ -558,63 +559,68 @@ def analyze_scan(scan) -> AIAnalysisResult:
     last_error: Exception | None = None
     attempts = settings.GEMINI_MAX_RETRIES + 1
 
-    for attempt in range(attempts):
-        try:
-            raw = provider.analyze_ui(payload)
-            analysis = _validate_analysis(raw)
-            break
-        except AIProviderError as exc:
-            last_error = exc
-            logger.warning("AI provider error on attempt %d: %s", attempt + 1, exc)
-            break
-        except (ValueError, ValidationError) as exc:
-            last_error = exc
-            logger.warning("Invalid AI response on attempt %d: %s", attempt + 1, exc)
+    try:
+        for attempt in range(attempts):
+            try:
+                raw = provider.analyze_ui(payload)
+                analysis = _validate_analysis(raw)
+                break
+            except AIProviderError as exc:
+                last_error = exc
+                logger.warning("AI provider error on attempt %d: %s", attempt + 1, exc)
+                # Provider error may be retryable on invalid format or transient error
+                if _is_rate_limited(exc) or "401" in str(exc) or "403" in str(exc):
+                    break
+            except (ValueError, ValidationError) as exc:
+                last_error = exc
+                logger.warning("Invalid AI response on attempt %d: %s", attempt + 1, exc)
 
-    if analysis is None:
-        logger.warning(
-            "AI analysis failed for scan %s: %s", scan.pk, last_error or "unknown"
-        )
-        log_event(
-            "ai.error",
-            scan_id=scan.pk,
-            reason=str(last_error or "unknown"),
-            attempts=attempt + 1,
-        )
-        if _is_rate_limited(last_error):
-            return AIAnalysisResult(
-                available=False,
-                status="rate_limited",
-                reason="provider_rate_limited",
-                message=_friendly_provider_error(str(last_error or "")),
+        if analysis is None:
+            logger.warning(
+                "AI analysis failed for scan %s: %s", scan.pk, last_error or "unknown"
             )
-        if _is_timeout(last_error):
+            log_event(
+                "ai.error",
+                scan_id=scan.pk,
+                reason=str(last_error or "unknown"),
+                attempts=attempt + 1,
+            )
+            if _is_rate_limited(last_error):
+                return AIAnalysisResult(
+                    available=False,
+                    status="rate_limited",
+                    reason="provider_rate_limited",
+                    message=_friendly_provider_error(str(last_error or "")),
+                )
+            if _is_timeout(last_error):
+                return AIAnalysisResult(
+                    available=False,
+                    status="failed",
+                    reason="provider_timeout",
+                    message=_friendly_provider_error(str(last_error or "")),
+                )
             return AIAnalysisResult(
                 available=False,
                 status="failed",
-                reason="provider_timeout",
-                message=_friendly_provider_error(str(last_error or "")),
+                reason="provider_or_validation_error",
+                message=AI_UNAVAILABLE_MESSAGE,
             )
-        return AIAnalysisResult(
-            available=False,
-            status="failed",
-            reason="provider_or_validation_error",
-            message=AI_UNAVAILABLE_MESSAGE,
-        )
 
-    created, combined = merge_ai_issues(scan, analysis)
-    logger.info(
-        "AI analysis for scan %s: %d created, %d combined (model %s)",
-        scan.pk, created, combined, provider.model,
-    )
-    return AIAnalysisResult(
-        available=True,
-        created=created,
-        combined=combined,
-        model=provider.model,
-        status="completed",
-        reason="ok",
-    )
+        created, combined = merge_ai_issues(scan, analysis)
+        logger.info(
+            "AI analysis for scan %s: %d created, %d combined (model %s)",
+            scan.pk, created, combined, provider.model,
+        )
+        return AIAnalysisResult(
+            available=True,
+            created=created,
+            combined=combined,
+            model=provider.model,
+            status="completed",
+            reason="ok",
+        )
+    finally:
+        gc.collect()
 
 
 # ---------------------------------------------------------------------------

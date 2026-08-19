@@ -189,22 +189,21 @@ TRUST_X_FORWARDED_FOR = env.bool("TRUST_X_FORWARDED_FOR", default=False)
 # Playwright browser behavior
 PLAYWRIGHT_HEADLESS = env.bool("PLAYWRIGHT_HEADLESS", default=True)
 SCAN_PAGE_TIMEOUT_MS = env.int("SCAN_PAGE_TIMEOUT_MS", default=30_000)
-# Short bounded idle wait: most pages settle in ~2s; never block a viewport
+# Short bounded idle wait: most pages settle in ~1.5s; never block a viewport
 # for the full budget. This is the single biggest per-viewport time saver.
-SCAN_NETWORK_IDLE_TIMEOUT_MS = env.int("SCAN_NETWORK_IDLE_TIMEOUT_MS", default=2_000)
+SCAN_NETWORK_IDLE_TIMEOUT_MS = env.int("SCAN_NETWORK_IDLE_TIMEOUT_MS", default=1_500)
 # Single-process Chromium with capped V8 heaps: fits ~200MB RAM hosts.
 CHROMIUM_LOW_MEMORY_MODE = env.bool("CHROMIUM_LOW_MEMORY_MODE", default=True)
-# V8 old-space heap cap (MB) for low-memory Chromium launches. 128MB wedges
-# the renderer under axe-core + DOM snapshots on heavy pages; 192MB keeps a
+# V8 old-space heap cap (MB) for low-memory Chromium launches. 144MB keeps a
 # safety margin while fitting comfortably under the free-tier 512MB container.
-CHROMIUM_V8_HEAP_MB = env.int("CHROMIUM_V8_HEAP_MB", default=192)
+CHROMIUM_V8_HEAP_MB = env.int("CHROMIUM_V8_HEAP_MB", default=144)
 # axe-core viewport policy in low-memory mode: "desktop" runs the (expensive)
 # accessibility pass on the desktop viewport only; "all" runs it on every
 # viewport. The accessibility pass is the single biggest transient JS spike.
 SCAN_AXE_VIEWPORTS = env("SCAN_AXE_VIEWPORTS", default="desktop")
 # Cap on elements captured per viewport for the DOM snapshot (transient
 # JS-object spike during collection; findings only need a representative set).
-SCAN_DOM_SNAPSHOT_LIMIT = env.int("SCAN_DOM_SNAPSHOT_LIMIT", default=100)
+SCAN_DOM_SNAPSHOT_LIMIT = env.int("SCAN_DOM_SNAPSHOT_LIMIT", default=80)
 # Abort fonts/media/tracker requests during scans (speed + memory). Images,
 # CSS and JS still load so responsive/overflow measurements stay accurate.
 SCAN_BLOCK_HEAVY_RESOURCES = env.bool("SCAN_BLOCK_HEAVY_RESOURCES", default=True)
@@ -257,13 +256,13 @@ SCAN_VIEWPORTS = (
 # measurements instead. AI_MAX_PROMPT_TOKENS caps the text prompt per request.
 GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
 GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-2.0-flash")
-GEMINI_TIMEOUT_MS = env.int("GEMINI_TIMEOUT_MS", default=30_000)
+GEMINI_TIMEOUT_MS = env.int("GEMINI_TIMEOUT_MS", default=60_000)
 GEMINI_MAX_RETRIES = env.int("GEMINI_MAX_RETRIES", default=2)
 AI_REPRESENTATIVE_VIEWPORTS = [(375, 812), (768, 1024), (1440, 900)]
 AI_IMAGE_MAX_WIDTH = env.int("AI_IMAGE_MAX_WIDTH", default=1024)
 AI_IMAGE_QUALITY = env.int("AI_IMAGE_QUALITY", default=70)
 AI_MAX_ISSUES = env.int("AI_MAX_ISSUES", default=20)
-AI_MAX_PROMPT_TOKENS = env.int("AI_MAX_PROMPT_TOKENS", default=25_000)
+AI_MAX_PROMPT_TOKENS = env.int("AI_MAX_PROMPT_TOKENS", default=15_000)
 AI_SEND_IMAGES = env.bool("AI_SEND_IMAGES", default=False)
 AI_ENABLED = env.bool("AI_ENABLED", default=True)
 
