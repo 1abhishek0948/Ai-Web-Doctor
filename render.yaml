@@ -118,10 +118,10 @@ services:
         value: "1"
 
       - key: MAX_SCAN_DURATION
-        value: "300" # Slower instance needs a longer budget than 120s
+        value: "600" # Free-tier CPU is throttled; give scans a 10-minute budget
 
       - key: SCAN_MAX_DURATION_SECONDS
-        value: "300" # Hard kill deadline for the scan subprocess (watchdog)
+        value: "600" # Hard kill deadline for the scan subprocess (watchdog)
 
       - key: MAX_SCREENSHOTS
         value: "8"

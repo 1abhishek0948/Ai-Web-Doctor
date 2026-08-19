@@ -42,8 +42,9 @@ RUN apt-get update \
 COPY requirements ./requirements
 RUN pip install --no-cache-dir -r requirements/production.txt
 
-# Install the Playwright Chromium browser used by the scanner.
-RUN playwright install chromium \
+# Install the Playwright browsers used by the scanner: the lightweight
+# headless shell (low-memory scans) plus regular Chromium (fallback path).
+RUN playwright install chromium-headless-shell chromium \
     && playwright install-deps chromium || true
 
 # Copy application source.
