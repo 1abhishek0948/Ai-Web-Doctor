@@ -394,9 +394,11 @@ ai_web_doctor/
 │   ├── scans/         # Scan model, views, dispatch, rate limiting, API
 │   ├── ai/            # Gemini provider, prompts, payload sizing, fix generation
 │   ├── issues/        # Issue + Verification models, verify/fix services
+│   ├── seo/           # robots.txt, sitemap.xml, no-index middleware
 │   └── reports/       # report download/generation (planned)
 ├── config/
 │   ├── settings/      # base.py / development.py / production.py
+│   ├── celery.py      # Celery app (optional queue with a broker)
 │   └── logging_config.py   # JSON formatter + log_event() helper
 ├── scanner/           # headless scanning engine (responsive, visual, axe, watchdog)
 ├── templates/         # Django templates (Tailwind + Alpine + htmx)
@@ -404,6 +406,8 @@ ai_web_doctor/
 │   ├── src/input.css  # Tailwind source (rebuild with npm run build)
 │   └── vendor/        # alpine.js, htmx
 ├── tests/             # Django test suite
+├── scripts/           # ops helpers (smoke_prod.sh, generate_seo_assets.py)
+├── docs/              # PRODUCTION.md (Render + Aiven + Upstash guide)
 └── requirements/
 ```
 
@@ -417,6 +421,8 @@ ai_web_doctor/
 | `/scans/<id>/results/` | Findings dashboard (severity + category breakdown) |
 | `/scans/<id>/issues/<iid>/` | Issue detail, fix suggestion, Verify Fix |
 | `/accounts/` | Register / login |
+| `/robots.txt` | Robots file (SEO) |
+| `/sitemap.xml` | XML sitemap (SEO) |
 | `/api/health/` | Health check |
 | `/admin/` | Django admin |
 
