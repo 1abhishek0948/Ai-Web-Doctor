@@ -25,17 +25,16 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_VIEWPORT = (375, 812)
 
-# Flags that keep Chromium's RSS small enough for low-memory hosts: capped V8
-# heaps, no background services, no crash reporter. Note: --single-process is
-# NOT used (unstable in Playwright's bundled Chromium), --renderer-process-limit=1
-# is NOT used (wedges the renderer after axe-core on heavy pages), and the V8
-# heap cap is 256MB NOT 128MB: with 128MB, running DOM snapshot + axe-core on
-# media-heavy sites (nytimes.com) wedges the renderer and every later
-# page.evaluate() hangs forever. Low-memory launches also use Playwright's
-# chromium-headless-shell channel (see BrowserSession._launch), which cuts
-# peak RSS by ~40% vs the full Chromium build.
+# Flags that keep Chromium's RSS small enough for low-memory hosts: no
+# background services, no crash reporter. Note: --single-process is NOT used
+# (unstable in Playwright's bundled Chromium) and --renderer-process-limit=1 is
+# NOT used (wedges the renderer after axe-core on heavy pages). The V8 heap cap
+# is dynamic (BrowserSettings.v8_heap_mb, default 192MB): 128MB wedges the
+# renderer under DOM snapshot + axe-core on media-heavy sites (nytimes.com),
+# while 256MB+ eats too much of a 512MB container. Low-memory launches also use
+# Playwright's chromium-headless-shell channel (see BrowserSession._launch),
+# which cuts peak RSS by ~40% vs the full Chromium build.
 LOW_MEMORY_ARGS = [
-    "--js-flags=--max-old-space-size=256 --max-semi-space-size=4",
     "--disable-extensions",
     "--disable-background-networking",
     "--disable-sync",
@@ -124,12 +123,16 @@ class BrowserSettings:
     block_service_workers: bool = True
     block_heavy_resources: bool = True
     block_images: bool = False
+    v8_heap_mb: int = 192
+    axe_viewports: str = "desktop"
+    dom_snapshot_limit: int = 100
 
     def launch_args(self) -> list[str]:
         """Chromium command-line flags for this session."""
         args = list(BASE_ARGS)
         if self.low_memory:
             args.extend(LOW_MEMORY_ARGS)
+            args.append(f"--js-flags=--max-old-space-size={self.v8_heap_mb} --max-semi-space-size=4")
         return args
 
 

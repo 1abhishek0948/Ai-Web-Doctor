@@ -42,6 +42,7 @@ class RecoverStaleScansTests(TestCase):
         self.assertEqual(recover_stale_scans(), 1)
         scan.refresh_from_db()
         self.assertEqual(scan.status, ScanStatus.FAILED)
+        self.assertIn("never picked up", scan.error_message)
 
     def test_fresh_running_scan_is_untouched(self):
         scan = _scan(ScanStatus.RUNNING, started_at=timezone.now())
@@ -145,3 +146,71 @@ class ScanWorkerCommandTests(TestCase):
         with mock.patch.object(services, "execute_scan") as execute:
             Command()._tick()
         execute.assert_not_called()
+
+    def test_worker_writes_heartbeat_every_tick(self):
+        from apps.scans.management.commands.scan_worker import Command
+        from apps.scans import services
+        from apps.scans.models import WorkerHeartbeat
+
+        with mock.patch.object(services, "execute_scan"), mock.patch.object(
+            services, "recover_stale_scans"
+        ):
+            Command()._tick()
+        heartbeat = WorkerHeartbeat.objects.get(pk=1)
+        self.assertIsNotNone(heartbeat.last_seen)
+        self.assertGreater(heartbeat.pid, 0)
+        self.assertEqual(heartbeat.version, "db-poll-2")
+
+    def test_worker_marks_execution_errors_failed(self):
+        from apps.scans.management.commands.scan_worker import Command
+        from apps.scans import services
+
+        scan = _scan(ScanStatus.QUEUED)
+        with mock.patch.object(
+            services, "execute_scan", side_effect=RuntimeError("boom")
+        ), mock.patch.object(services, "recover_stale_scans"):
+            Command()._tick()
+        scan.refresh_from_db()
+        self.assertEqual(scan.status, ScanStatus.FAILED)
+        self.assertIn("worker", scan.error_message)
+
+
+class ScanWorkerWatchdogTests(TestCase):
+    """The worker's hard watchdog must be armed for every claimed scan."""
+
+    def test_watchdog_armed_and_cancelled_after_scan(self):
+        from apps.scans.management.commands.scan_worker import Command
+        from apps.scans import services
+
+        with mock.patch("threading.Timer") as timer_cls:
+            timer_cls.return_value.cancel = mock.Mock()
+            Command()._start_watchdog()
+        deadline_s = timer_cls.call_args[0][0]
+        self.assertGreaterEqual(deadline_s, 600)
+        timer_cls.return_value.daemon = True
+
+
+class BrowserMemorySettingsTests(TestCase):
+    """Low-memory browser settings stay inside the free-tier budget."""
+
+    def test_low_memory_launch_args_cap_v8_heap(self):
+        from scanner.browser import BrowserSettings
+
+        args = BrowserSettings(low_memory=True, v8_heap_mb=192).launch_args()
+        self.assertIn("--js-flags=--max-old-space-size=192 --max-semi-space-size=4", args)
+
+    def test_axe_runs_on_desktop_viewport_only_in_low_memory_mode(self):
+        from scanner.analyzer import _should_run_axe
+        from scanner.browser import BrowserSettings
+
+        low = BrowserSettings(low_memory=True, axe_viewports="desktop")
+        self.assertFalse(_should_run_axe(0, 2, low))
+        self.assertTrue(_should_run_axe(1, 2, low))
+
+    def test_axe_runs_everywhere_when_configured(self):
+        from scanner.analyzer import _should_run_axe
+        from scanner.browser import BrowserSettings
+
+        all_vp = BrowserSettings(low_memory=True, axe_viewports="all")
+        self.assertTrue(_should_run_axe(0, 2, all_vp))
+        self.assertTrue(_should_run_axe(1, 2, all_vp))

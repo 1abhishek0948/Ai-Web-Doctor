@@ -74,13 +74,21 @@ def recover_stale_scans() -> int:
             scan.status == ScanStatus.RUNNING
             and elapsed > timedelta(seconds=settings.MAX_SCAN_DURATION)
         )
-        scan.set_failed(
-            "The scan did not complete — it exceeded the time limit and was "
-            "stopped. Please scan again."
-            if timed_out
-            else "The scan did not complete — the server restarted or ran out of "
-            "memory. Please scan again."
-        )
+        if timed_out:
+            message = (
+                "The scan did not complete — it exceeded the time limit and was "
+                "stopped. Please scan again."
+            )
+        elif scan.status == ScanStatus.QUEUED:
+            message = (
+                "The scan was never picked up by the scan worker. Please scan again."
+            )
+        else:
+            message = (
+                "The scan did not complete — the server restarted or ran out of "
+                "memory. Please scan again."
+            )
+        scan.set_failed(message)
     if count:
         log_event("scan.recovered", count=count)
     return count
@@ -129,6 +137,9 @@ def _browser_settings() -> BrowserSettings:
         low_memory=settings.CHROMIUM_LOW_MEMORY_MODE,
         block_heavy_resources=settings.SCAN_BLOCK_HEAVY_RESOURCES,
         block_images=settings.SCAN_BLOCK_IMAGES,
+        v8_heap_mb=settings.CHROMIUM_V8_HEAP_MB,
+        axe_viewports=settings.SCAN_AXE_VIEWPORTS,
+        dom_snapshot_limit=settings.SCAN_DOM_SNAPSHOT_LIMIT,
     )
 
 

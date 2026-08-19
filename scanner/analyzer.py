@@ -222,7 +222,9 @@ def _scan_page(
         page_info = dom.collect_page_info(page)
         metrics = dom.collect_metrics(page)
         result.metrics = metrics
-        result.dom_snapshot = dom.collect_dom_snapshot(page)
+        result.dom_snapshot = dom.collect_dom_snapshot(
+            page, limit=settings.dom_snapshot_limit
+        )
         result.final_url = final_url
         result.title = page_info.get("title") or final_url
         result.status_code = status_code
@@ -339,6 +341,23 @@ def scan_url(
     )
 
 
+def _should_run_axe(
+    index: int, viewport_count: int, settings: BrowserSettings
+) -> bool:
+    """Whether the axe-core accessibility pass should run at a viewport.
+
+    The accessibility pass is the biggest transient JS spike in a scan. In
+    low-memory mode it defaults to the desktop viewport only (``desktop``),
+    which keeps peak RSS inside the free-tier 512MB container; ``all`` restores
+    per-viewport coverage.
+    """
+    if settings.axe_viewports == "all":
+        return True
+    if settings.low_memory and settings.axe_viewports == "desktop":
+        return index == viewport_count - 1
+    return True
+
+
 def scan_site(
     url: str,
     *,
@@ -381,6 +400,7 @@ def scan_site(
                     storage,
                     scan_id,
                     max_response_size,
+                    run_accessibility=_should_run_axe(index, len(viewport_list), browser_settings),
                     run_visual=(index == 0),
                 )
             )

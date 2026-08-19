@@ -15,6 +15,24 @@ class ScanStatus(models.TextChoices):
     PARTIAL = "partial", "Partial"
 
 
+class WorkerHeartbeat(models.Model):
+    """Single-row heartbeat written by the scan worker every poll tick.
+
+    Lets the health endpoint and operators answer "is the worker alive?"
+    without dashboard access: if ``last_seen`` stops advancing, the worker is
+    down, restarting, or spun down. The 5-second Postgres write also keeps the
+    free-tier worker busy enough not to idle out.
+    """
+
+    id = models.PositiveBigIntegerField(primary_key=True, default=1)
+    last_seen = models.DateTimeField()
+    pid = models.IntegerField()
+    version = models.CharField(max_length=40, default="db-poll-2")
+
+    class Meta:
+        db_table = "worker_heartbeat"
+
+
 class AIStatus(models.TextChoices):
     """Machine-readable AI analysis state for a scan.
 

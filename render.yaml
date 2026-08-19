@@ -124,7 +124,7 @@ services:
         value: "600" # Hard kill deadline for the scan subprocess (watchdog)
 
       - key: MAX_SCREENSHOTS
-        value: "8"
+        value: "4" # Each capture is a transient PNG spike; 4 keeps memory low
 
       - key: MAX_RESPONSE_SIZE
         value: "5242880"

@@ -6,17 +6,21 @@ issue detail pages. Part 7 adds the on-demand AI fix endpoint.
 
 from __future__ import annotations
 
+import os
+
 from django.conf import settings
 from django.contrib import messages
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from apps.ai.service import generate_fix
 from apps.issues.models import Category, Issue
 from apps.issues.queryservice import IssueQueryService
 from apps.issues.services import verify_issue
-from apps.scans.models import ProgressStage, Scan, ScanStatus
+from apps.scans.models import ProgressStage, Scan, ScanStatus, WorkerHeartbeat
 from apps.scans.ratelimit import get_client_ip, quota_exceeded
 from apps.scans.scoring import compute_score_summary
 from apps.scans.services import (
@@ -35,6 +39,8 @@ def health_view(request):
     ``scan_mode`` reveals where Chromium runs: ``worker`` (dedicated
     DB-polling worker instance — the production architecture), ``subprocess``,
     ``celery`` or ``thread`` (web-instance fallback, unsafe on free tier).
+    ``worker_last_seen_seconds_ago`` is None when no worker heartbeat exists
+    yet (worker down or not deployed) and grows as the worker ages.
     """
     if settings.SCAN_WORKER_MODE:
         scan_mode = "worker"
@@ -44,14 +50,32 @@ def health_view(request):
         scan_mode = "thread"
     else:
         scan_mode = "celery"
+
+    heartbeat = None
+    worker_last_seen_seconds_ago = None
+    try:
+        heartbeat = WorkerHeartbeat.objects.get(pk=1)
+        worker_last_seen_seconds_ago = int(
+            (timezone.now() - heartbeat.last_seen).total_seconds()
+        )
+    except (WorkerHeartbeat.DoesNotExist, ObjectDoesNotExist):
+        pass
+
     return JsonResponse(
         {
             "status": "ok",
             "service": "ai-web-doctor",
             "debug": settings.DEBUG,
-            "version": 3,
+            "version": 4,
+            "build": os.environ.get("COMMIT_REF")
+            or os.environ.get("RENDER_GIT_COMMIT")
+            or os.environ.get("GIT_COMMIT")
+            or "unknown",
             "scan_mode": scan_mode,
             "max_concurrent_scans": settings.MAX_CONCURRENT_SCANS,
+            "worker_last_seen_seconds_ago": worker_last_seen_seconds_ago,
+            "worker_version": heartbeat.version if heartbeat else None,
+            "worker_pid": heartbeat.pid if heartbeat else None,
         }
     )
 

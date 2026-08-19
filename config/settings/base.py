@@ -189,6 +189,17 @@ SCAN_PAGE_TIMEOUT_MS = env.int("SCAN_PAGE_TIMEOUT_MS", default=30_000)
 SCAN_NETWORK_IDLE_TIMEOUT_MS = env.int("SCAN_NETWORK_IDLE_TIMEOUT_MS", default=2_000)
 # Single-process Chromium with capped V8 heaps: fits ~200MB RAM hosts.
 CHROMIUM_LOW_MEMORY_MODE = env.bool("CHROMIUM_LOW_MEMORY_MODE", default=True)
+# V8 old-space heap cap (MB) for low-memory Chromium launches. 128MB wedges
+# the renderer under axe-core + DOM snapshots on heavy pages; 192MB keeps a
+# safety margin while fitting comfortably under the free-tier 512MB container.
+CHROMIUM_V8_HEAP_MB = env.int("CHROMIUM_V8_HEAP_MB", default=192)
+# axe-core viewport policy in low-memory mode: "desktop" runs the (expensive)
+# accessibility pass on the desktop viewport only; "all" runs it on every
+# viewport. The accessibility pass is the single biggest transient JS spike.
+SCAN_AXE_VIEWPORTS = env("SCAN_AXE_VIEWPORTS", default="desktop")
+# Cap on elements captured per viewport for the DOM snapshot (transient
+# JS-object spike during collection; findings only need a representative set).
+SCAN_DOM_SNAPSHOT_LIMIT = env.int("SCAN_DOM_SNAPSHOT_LIMIT", default=100)
 # Abort fonts/media/tracker requests during scans (speed + memory). Images,
 # CSS and JS still load so responsive/overflow measurements stay accurate.
 SCAN_BLOCK_HEAVY_RESOURCES = env.bool("SCAN_BLOCK_HEAVY_RESOURCES", default=True)
