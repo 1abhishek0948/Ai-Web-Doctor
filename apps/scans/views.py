@@ -30,13 +30,25 @@ VALID_SEVERITIES = ("critical", "high", "medium", "low", "info")
 
 
 def health_view(request):
-    """Return basic application health information."""
+    """Return basic application health information.
+
+    ``scan_mode`` reveals where Chromium runs: ``celery`` (dedicated worker
+    instance — the production architecture), ``subprocess`` or ``thread``.
+    """
+    if settings.SCAN_SUBPROCESS_MODE:
+        scan_mode = "subprocess"
+    elif settings.CELERY_TASK_ALWAYS_EAGER:
+        scan_mode = "thread"
+    else:
+        scan_mode = "celery"
     return JsonResponse(
         {
             "status": "ok",
             "service": "ai-web-doctor",
             "debug": settings.DEBUG,
-            "version": 1,
+            "version": 2,
+            "scan_mode": scan_mode,
+            "max_concurrent_scans": settings.MAX_CONCURRENT_SCANS,
         }
     )
 

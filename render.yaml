@@ -126,7 +126,7 @@ services:
         value: "False" # In-process scans: one python process hosts Chromium
 
       - key: SCAN_VIEWPORTS
-        value: "[[320,800],[390,844],[768,1024],[1440,900]]" # 4 viewports to fit low-RAM hosts
+        value: "[[390,844],[1440,900]]" # Mobile + desktop: 2 viewports to fit free-tier CPU/RAM
 
       - key: MAX_CONCURRENT_SCANS
         value: "1"

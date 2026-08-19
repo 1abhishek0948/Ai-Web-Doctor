@@ -111,7 +111,9 @@ class ProductionSettingsTests(SimpleTestCase):
     def test_production_forces_safe_defaults(self):
         # Load production settings in a fresh subprocess to avoid polluting
         # this process's cached settings object. No SCAN_* env vars are set,
-        # so the values must come from the forced production defaults.
+        # so concurrency/idle-wait must come from the forced production
+        # defaults, and SCAN_SUBPROCESS_MODE must NOT be forced True: scan
+        # execution belongs to the dedicated Celery worker instance.
         import subprocess
         import sys
 
@@ -139,8 +141,34 @@ class ProductionSettingsTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             result.stdout.strip(),
-            "True 1 2000 False 3600 True",
+            "False 1 2000 False 3600 True",
         )
+
+    def test_production_respects_scan_mode_env(self):
+        # The blueprint sets SCAN_SUBPROCESS_MODE explicitly; production must
+        # respect it instead of hardcoding a mode.
+        import subprocess
+        import sys
+
+        code = (
+            "import os, django\n"
+            "os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings.production'\n"
+            "os.environ['SECRET_KEY'] = 'k' * 60\n"
+            "os.environ['ALLOWED_HOSTS'] = 'example.com'\n"
+            "os.environ['DATABASE_URL'] = 'postgres://u:p@localhost:5432/db'\n"
+            "os.environ['SCAN_SUBPROCESS_MODE'] = 'True'\n"
+            "django.setup()\n"
+            "from django.conf import settings\n"
+            "print(settings.SCAN_SUBPROCESS_MODE)\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "True")
 
 
 if __name__ == "__main__":

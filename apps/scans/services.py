@@ -54,12 +54,13 @@ def recover_stale_scans() -> int:
 
     Two windows: a ``queued`` scan that was never picked up (worker cold start
     on the free tier can take a couple of minutes) is declared stale sooner
-    than a genuinely ``running`` one, which gets the full scan budget.
+    than a genuinely ``running`` one. The running window is aligned with the
+    Celery hard time limit (``MAX_SCAN_DURATION * 2``) so a scan that is still
+    alive and working is never swept mid-run.
     """
     now = timezone.now()
-    long_window = timedelta(seconds=settings.MAX_SCAN_DURATION + 60)
     queued_cutoff = now - timedelta(seconds=min(240, settings.MAX_SCAN_DURATION))
-    running_cutoff = now - long_window
+    running_cutoff = now - timedelta(seconds=settings.MAX_SCAN_DURATION * 2 + 60)
     stale = Scan.objects.filter(status__in=[ScanStatus.QUEUED, ScanStatus.RUNNING]).filter(
         Q(status=ScanStatus.QUEUED, created_at__lt=queued_cutoff)
         | Q(status=ScanStatus.RUNNING, started_at__lt=running_cutoff)
@@ -68,9 +69,17 @@ def recover_stale_scans() -> int:
     if count:
         logger.warning("Recovering %d stale scan(s) stuck in queued/running.", count)
     for scan in stale.iterator():
+        elapsed = now - (scan.started_at or scan.created_at)
+        timed_out = (
+            scan.status == ScanStatus.RUNNING
+            and elapsed > timedelta(seconds=settings.MAX_SCAN_DURATION)
+        )
         scan.set_failed(
-            "The scan did not complete — the server restarted or ran out of memory. "
-            "Please scan again."
+            "The scan did not complete — it exceeded the time limit and was "
+            "stopped. Please scan again."
+            if timed_out
+            else "The scan did not complete — the server restarted or ran out of "
+            "memory. Please scan again."
         )
     if count:
         log_event("scan.recovered", count=count)

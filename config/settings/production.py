@@ -10,10 +10,12 @@ DEBUG = False
 if not SECRET_KEY:  # noqa: F405
     raise RuntimeError("SECRET_KEY must be set in production.")
 
-# Production-safe scan defaults. These are unconditional: the unsafe base
-# defaults (thread scanning, 2 concurrent Chromiums, 10s idle waits) can never
-# leak into production, even if env vars or a .env file carry stale values.
-SCAN_SUBPROCESS_MODE = True
+# Production-safe scan defaults. Concurrency and idle-wait are hard-forced
+# below; scan *execution mode* is NOT: the deployment (render.yaml) runs scans
+# on a dedicated Celery worker instance, and the web process must never spawn
+# Chromium. Forcing subprocess mode here would launch Chromium on the web
+# instance and OOM-kill the free-tier container mid-scan.
+SCAN_SUBPROCESS_MODE = env.bool("SCAN_SUBPROCESS_MODE", default=False)
 MAX_CONCURRENT_SCANS = 1
 SCAN_NETWORK_IDLE_TIMEOUT_MS = 2_000
 
