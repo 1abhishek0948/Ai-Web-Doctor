@@ -86,7 +86,7 @@ class ScanRateLimitTests(TestCase):
     def test_concurrency_limit_blocks_extra_queues(self):
         with override_settings(MAX_CONCURRENT_SCANS=0):
             response = self.client.post(self.url, {"url": "https://example.com"}, follow=True)
-        self.assertContains(response, "busy")
+        self.assertContains(response, "in progress")
         self.assertEqual(Scan.objects.count(), 0)
 
 

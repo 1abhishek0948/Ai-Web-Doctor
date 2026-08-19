@@ -50,12 +50,20 @@ def recover_stale_scans() -> int:
     A scan can be left permanently ``running`` when the process hosting it
     dies (OOM kill, deploy, crash) — the state machine never gets a chance to
     run its finally handler. This sweeps those scans so the UI shows a clear
-    error instead of an eternal spinner.
+    error instead of an eternal spinner and the concurrency slot is freed.
+
+    Two windows: a ``queued`` scan that was never picked up (worker cold start
+    on the free tier can take a couple of minutes) is declared stale sooner
+    than a genuinely ``running`` one, which gets the full scan budget.
     """
-    cutoff = timezone.now() - timedelta(seconds=settings.MAX_SCAN_DURATION + 60)
-    stale = Scan.objects.filter(
-        status__in=[ScanStatus.QUEUED, ScanStatus.RUNNING]
-    ).filter(Q(started_at__lt=cutoff) | Q(started_at__isnull=True, created_at__lt=cutoff))
+    now = timezone.now()
+    long_window = timedelta(seconds=settings.MAX_SCAN_DURATION + 60)
+    queued_cutoff = now - timedelta(seconds=min(240, settings.MAX_SCAN_DURATION))
+    running_cutoff = now - long_window
+    stale = Scan.objects.filter(status__in=[ScanStatus.QUEUED, ScanStatus.RUNNING]).filter(
+        Q(status=ScanStatus.QUEUED, created_at__lt=queued_cutoff)
+        | Q(status=ScanStatus.RUNNING, started_at__lt=running_cutoff)
+    )
     count = stale.count()
     if count:
         logger.warning("Recovering %d stale scan(s) stuck in queued/running.", count)

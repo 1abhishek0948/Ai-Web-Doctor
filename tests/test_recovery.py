@@ -78,3 +78,22 @@ class RecoverStaleScansTests(TestCase):
         self.assertEqual(response.status_code, 200)
         scan.refresh_from_db()
         self.assertEqual(scan.status, ScanStatus.FAILED)
+
+    def test_stale_queued_scan_does_not_block_new_scan(self):
+        # A queued scan abandoned by a dead worker/OOM occupies the concurrency
+        # slot; submitting a new scan must sweep it first, not say "busy".
+        stale = Scan.objects.create(
+            url="https://old.example.com/",
+            status=ScanStatus.QUEUED,
+        )
+        Scan.objects.filter(pk=stale.pk).update(created_at=timezone.now() - timedelta(hours=1))
+        with mock.patch("scanner.security._resolve_hostname", return_value=["93.184.216.34"]), (
+            override_settings(MAX_CONCURRENT_SCANS=1)
+        ), mock.patch("apps.scans.views.dispatch_scan"):
+            response = self.client.post(
+                reverse("scans:scan-list"), {"url": "https://example.com"}, follow=True
+            )
+        stale.refresh_from_db()
+        self.assertEqual(stale.status, ScanStatus.FAILED)
+        self.assertEqual(Scan.objects.filter(status=ScanStatus.QUEUED).count(), 1)
+        self.assertNotContains(response, "in progress")

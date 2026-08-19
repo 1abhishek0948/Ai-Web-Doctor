@@ -87,6 +87,10 @@ def _create_and_dispatch(request: HttpRequest) -> HttpResponse:
             status=429,
         )
 
+    # Sweep stale scans first: a scan left QUEUED/RUNNING by an OOM kill, crash
+    # or deploy would otherwise occupy the concurrency slot and block everyone.
+    recover_stale_scans()
+
     # Resource limit: never queue more scans than MAX_CONCURRENT_SCANS.
     running = Scan.objects.filter(
         status__in=(ScanStatus.QUEUED, ScanStatus.RUNNING)
@@ -94,7 +98,7 @@ def _create_and_dispatch(request: HttpRequest) -> HttpResponse:
     if running >= settings.MAX_CONCURRENT_SCANS:
         messages.error(
             request,
-            "The scanner is busy right now. Please try again in a moment.",
+            "Another scan is still in progress. Please try again in a few minutes.",
         )
         return redirect("landing")
 
