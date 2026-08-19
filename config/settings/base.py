@@ -200,6 +200,11 @@ SCAN_BLOCK_IMAGES = env.bool("SCAN_BLOCK_IMAGES", default=False)
 # worker: Chromium memory is fully released after each scan and an OOM can
 # never kill the web process. Falls back to the thread for dev when disabled.
 SCAN_SUBPROCESS_MODE = env.bool("SCAN_SUBPROCESS_MODE", default=False)
+# Run scans via the DB-polling worker (``python manage.py scan_worker`` on a
+# dedicated instance). The web process only marks scans QUEUED in Postgres;
+# the worker claims them and executes the scan in-process. No message broker
+# needed — this is the production architecture for broker-less hosts.
+SCAN_WORKER_MODE = env.bool("SCAN_WORKER_MODE", default=False)
 
 # Viewports scanned, covering mobile, tablet and desktop.
 # Overridable via SCAN_VIEWPORTS env var as JSON: "[[320,800],[768,1024]]".

@@ -124,13 +124,15 @@ class ProductionSettingsTests(SimpleTestCase):
             "os.environ['ALLOWED_HOSTS'] = 'example.com'\n"
             "os.environ['DATABASE_URL'] = 'postgres://u:p@localhost:5432/db'\n"
             "os.environ.pop('SCAN_SUBPROCESS_MODE', None)\n"
+            "os.environ.pop('SCAN_WORKER_MODE', None)\n"
             "os.environ.pop('MAX_CONCURRENT_SCANS', None)\n"
             "os.environ.pop('SCAN_NETWORK_IDLE_TIMEOUT_MS', None)\n"
             "django.setup()\n"
             "from django.conf import settings\n"
-            "print(settings.SCAN_SUBPROCESS_MODE, settings.MAX_CONCURRENT_SCANS, "
-            "settings.SCAN_NETWORK_IDLE_TIMEOUT_MS, settings.DEBUG, "
-            "settings.SECURE_HSTS_SECONDS, settings.SECURE_SSL_REDIRECT)\n"
+            "print(settings.SCAN_WORKER_MODE, settings.SCAN_SUBPROCESS_MODE, "
+            "settings.MAX_CONCURRENT_SCANS, settings.SCAN_NETWORK_IDLE_TIMEOUT_MS, "
+            "settings.DEBUG, settings.SECURE_HSTS_SECONDS, "
+            "settings.SECURE_SSL_REDIRECT)\n"
         )
         result = subprocess.run(
             [sys.executable, "-c", code],
@@ -141,7 +143,7 @@ class ProductionSettingsTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             result.stdout.strip(),
-            "False 1 2000 False 3600 True",
+            "True False 1 2000 False 3600 True",
         )
 
     def test_production_respects_scan_mode_env(self):

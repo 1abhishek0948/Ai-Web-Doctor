@@ -5,14 +5,15 @@
 # Free tier memory is 512MB per instance. Chromium needs ~400MB alone, so
 # scans NEVER run on the web instance:
 #
-#   web    — gunicorn (small footprint) — enqueues scans to Redis via Celery
-#   worker — celery worker (own instance) — runs the scan with Chromium, then
-#            exits, releasing all browser memory
-#   redis  — free broker that carries scan jobs from web to worker
+#   web    — gunicorn (small footprint) — marks scans QUEUED in Postgres
+#   worker — DB-polling worker (own instance) — claims queued scans from
+#            Postgres and runs them with Chromium, then exits, releasing all
+#            browser memory
 #
-# Without this split, the web process + Chromium exceed 512MB and the kernel
-# OOM-kills the whole container mid-scan ("server restarted or ran out of
-# memory").
+# No Redis is used: Render's managed Redis is a paid add-on, so scans travel
+# through Postgres instead of a broker. Without the web/worker split, the web
+# process + Chromium exceed 512MB and the kernel OOM-kills the whole container
+# mid-scan ("server restarted or ran out of memory").
 # ============================================================================
 
 databases:
@@ -20,14 +21,8 @@ databases:
     plan: free
     region: oregon # Render databases are deployed in a specific region
 
-redis:
-  - name: ai-web-doctor-redis
-    plan: free
-    region: oregon
-    maxmemoryPolicy: allkeys-lru
-
 services:
-  # --- Web: serves the UI/API, dispatches scans to the worker ---------------
+  # --- Web: serves the UI/API, queues scans for the worker ---------------
   - type: web
     name: ai-web-doctor
     runtime: docker
@@ -45,11 +40,6 @@ services:
           name: ai-web-doctor-db
           property: connectionString
 
-      - key: REDIS_URL
-        fromRedis:
-          name: ai-web-doctor-redis
-          property: connectionString
-
       - key: DEBUG
         value: "False"
 
@@ -65,8 +55,8 @@ services:
       - key: SITE_URL
         value: "https://ai-web-doctor.onrender.com"
 
-      - key: CELERY_TASK_ALWAYS_EAGER
-        value: "False" # Enqueue to Redis; the worker instance runs the scan
+      - key: SCAN_WORKER_MODE
+        value: "True" # Scans run on the worker instance, never here
 
       - key: SCAN_SUBPROCESS_MODE
         value: "False" # Never spawn Chromium here — the worker owns the browser
@@ -91,20 +81,16 @@ services:
     region: oregon
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    command: celery -A config.celery worker --concurrency 1 --loglevel=info
+    command: python manage.py scan_worker
 
     # The worker gets its own 512MB instance: Chromium (the biggest consumer)
-    # runs in-process inside the Celery task, so nothing competes with it.
-    # Concurrency 1 keeps a single browser alive at any moment.
+    # runs in-process inside the worker loop, so nothing competes with it. It
+    # polls Postgres every few seconds for QUEUED scans and claims them one at
+    # a time.
     envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: ai-web-doctor-db
-          property: connectionString
-
-      - key: REDIS_URL
-        fromRedis:
-          name: ai-web-doctor-redis
           property: connectionString
 
       - key: DEBUG
@@ -119,8 +105,8 @@ services:
       - key: ALLOWED_HOSTS
         value: ".onrender.com,localhost,127.0.0.1"
 
-      - key: CELERY_TASK_ALWAYS_EAGER
-        value: "False"
+      - key: SCAN_WORKER_MODE
+        value: "True"
 
       - key: SCAN_SUBPROCESS_MODE
         value: "False" # In-process scans: one python process hosts Chromium

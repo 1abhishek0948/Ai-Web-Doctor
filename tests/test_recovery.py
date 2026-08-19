@@ -97,3 +97,51 @@ class RecoverStaleScansTests(TestCase):
         self.assertEqual(stale.status, ScanStatus.FAILED)
         self.assertEqual(Scan.objects.filter(status=ScanStatus.QUEUED).count(), 1)
         self.assertNotContains(response, "in progress")
+
+    def test_dispatch_in_worker_mode_keeps_scan_queued(self):
+        # The web process only marks scans QUEUED; the dedicated worker claims
+        # them from Postgres. No thread, subprocess or broker involved.
+        scan = _scan(ScanStatus.QUEUED)
+        from apps.scans import services
+
+        with (
+            override_settings(SCAN_WORKER_MODE=True),
+            mock.patch.object(services, "execute_scan") as execute,
+            mock.patch.object(services, "_dispatch_subprocess") as sub,
+        ):
+            services.dispatch_scan(scan)
+        scan.refresh_from_db()
+        self.assertEqual(scan.status, ScanStatus.QUEUED)
+        execute.assert_not_called()
+        sub.assert_not_called()
+
+
+class ScanWorkerCommandTests(TestCase):
+    """The DB-polling worker claims queued scans and executes them."""
+
+    def test_worker_claims_oldest_queued_scan(self):
+        from apps.scans.management.commands.scan_worker import Command
+        from apps.scans import services
+
+        older = _scan(ScanStatus.QUEUED)
+        newer = _scan(ScanStatus.QUEUED)
+        Scan.objects.filter(pk=newer.pk).update(
+            created_at=timezone.now() + timedelta(seconds=5)
+        )
+        with mock.patch.object(services, "execute_scan") as execute, mock.patch.object(
+            services, "recover_stale_scans"
+        ):
+            Command()._tick()
+        older.refresh_from_db()
+        newer.refresh_from_db()
+        self.assertEqual(older.status, ScanStatus.RUNNING)
+        self.assertEqual(newer.status, ScanStatus.QUEUED)
+        execute.assert_called_once_with(older.pk)
+
+    def test_worker_skips_when_nothing_queued(self):
+        from apps.scans.management.commands.scan_worker import Command
+        from apps.scans import services
+
+        with mock.patch.object(services, "execute_scan") as execute:
+            Command()._tick()
+        execute.assert_not_called()

@@ -362,8 +362,15 @@ def _dispatch_subprocess(scan: Scan) -> None:
 
 
 def dispatch_scan(scan: Scan) -> None:
-    """Dispatch a scan to a subprocess, Celery, or a dev fallback thread."""
+    """Dispatch a scan to the DB-polling worker, subprocess, Celery, or a dev
+    fallback thread (in that order of preference)."""
     recover_stale_scans()
+    if settings.SCAN_WORKER_MODE:
+        # The scan stays QUEUED; the dedicated worker service (management
+        # command ``scan_worker``) claims it from Postgres. Nothing to do here.
+        logger.info("Scan %s queued for the DB-polling worker.", scan.pk)
+        log_event("scan.dispatched", scan_id=scan.pk, mode="worker")
+        return
     if settings.SCAN_SUBPROCESS_MODE:
         _dispatch_subprocess(scan)
         return

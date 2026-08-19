@@ -12,10 +12,13 @@ if not SECRET_KEY:  # noqa: F405
 
 # Production-safe scan defaults. Concurrency and idle-wait are hard-forced
 # below; scan *execution mode* is NOT: the deployment (render.yaml) runs scans
-# on a dedicated Celery worker instance, and the web process must never spawn
-# Chromium. Forcing subprocess mode here would launch Chromium on the web
-# instance and OOM-kill the free-tier container mid-scan.
+# on a dedicated DB-polling worker instance, and the web process must never
+# spawn Chromium. Forcing subprocess mode here would launch Chromium on the
+# web instance and OOM-kill the free-tier container mid-scan.
 SCAN_SUBPROCESS_MODE = env.bool("SCAN_SUBPROCESS_MODE", default=False)
+# Production default: scans run on the dedicated worker service, which polls
+# Postgres for QUEUED scans. No Redis/message broker required.
+SCAN_WORKER_MODE = env.bool("SCAN_WORKER_MODE", default=True)
 MAX_CONCURRENT_SCANS = 1
 SCAN_NETWORK_IDLE_TIMEOUT_MS = 2_000
 

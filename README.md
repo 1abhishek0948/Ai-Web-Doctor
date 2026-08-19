@@ -30,7 +30,7 @@ URL
 ↓
 Security Validation (SSRF guard)
 ↓
-Celery (Redis broker → dedicated worker instance)
+DB-polling worker (dedicated instance claims the scan from Postgres)
 ↓
 Playwright (real Chromium, in-process on the worker)
 ↓
@@ -83,7 +83,7 @@ This is a working, tested implementation. Be aware of what is and is not finishe
 | SSRF guard / DNS rebinding protection | Implemented |
 | Structured JSON logging | Implemented |
 | Django admin / accounts / results UI | Implemented |
-| Celery background queue | Implemented (worker instance runs Chromium; dev mode runs scans in-process) |
+| DB-polling background worker | Implemented (dedicated worker instance runs Chromium; dev mode runs scans in-process) |
 | Production deployment (Render free tier, subprocess + watchdog) | **Live** at [ai-web-doctor.onrender.com](https://ai-web-doctor.onrender.com) |
 | Reports app (downloads / health score reports) | **Planned** (empty placeholder app) |
 | REST API beyond health endpoint | **Planned** (currently only `/api/health/`) |
@@ -212,26 +212,23 @@ To run it yourself, follow [Quick start](#quick-start) below.
 ## Architecture
 
 ```
-┌────────────┐   POST /scans/   ┌──────────────────┐   enqueue    ┌─────────────────────────┐
-│  Browser   │ ───────────────► │ Django web layer │ ───────────► │ Redis (Celery broker)  │
-│  (UI)      │                  │ rate limit,      │              └───────────┬─────────────┘
-└────────────┘                  │ concurrency cap  │                          │ task
-                                └──────────────────┘                          ▼
-                                                                            ┌─────────────────────────┐
-                              PostgreSQL                              ┌────►│ Celery worker instance │
-                           (scans, issues,                              │    │ Playwright 9 viewports │
-                            verifications)  ◄───────────────────────────┘    │ responsive + axe       │
-                                                                              │ visual-design checks   │
-                                                                              │ screenshots + AI       │
-                                                                              └─────────────────────────┘
+┌────────────┐   POST /scans/   ┌──────────────────┐   queue in     ┌─────────────────────────┐
+│  Browser   │ ───────────────► │ Django web layer │ ─────────────► │ DB-polling worker       │
+│  (UI)      │                  │ rate limit,      │   PostgreSQL   │ instance (own 512MB)    │
+└────────────┘                  │ concurrency cap  │                │ Playwright 2 viewports  │
+                                └──────────────────┘                │ responsive + axe       │
+                                              ▲                     │ visual-design checks   │
+                                              │ claims queued       │ screenshots + AI       │
+                                  PostgreSQL   └─────────────────────└─────────────────────────┘
+                               (scans, issues,
+                                verifications)
 ```
 
 ```mermaid
 flowchart TD
     User[User] --> Django[Django Web Layer]
     Django --> PG[(PostgreSQL)]
-    Django --> Redis[(Redis broker)]
-    Redis --> Worker[Celery Worker instance]
+    PG --> Worker[DB-polling Worker instance]
     Worker --> PW[Playwright / Chromium]
     PW --> Scanner[Deterministic Scanner]
     Scanner --> Responsive[Responsive / layout checks]
@@ -245,11 +242,10 @@ flowchart TD
 | Component | Responsibility |
 |---|---|
 | **Browser (UI)** | Landing page with scan form, live progress, results dashboard, issue detail + fix + verify |
-| **Django (web)** | Web layer: auth, rate limiting, concurrency cap, views, API, admin, scan dispatch |
-| **Redis** | Celery broker + result backend (delivers scan jobs web → worker) |
-| **Celery worker** | Dedicated instance that executes scans with Chromium in-process (free-tier memory safety) |
-| **PostgreSQL** | Scans, screenshots metadata, page metrics, issues, verifications |
-| **Playwright** | Real Chromium page lifecycle, 9-viewport engine, screenshots, CDP resource blocking |
+| **Django (web)** | Web layer: auth, rate limiting, concurrency cap, views, API, admin, scan queueing |
+| **Worker** | Dedicated instance running `manage.py scan_worker`: polls Postgres, claims queued scans, executes them with Chromium in-process (free-tier memory safety, no Redis needed) |
+| **PostgreSQL** | Scans, screenshots metadata, page metrics, issues, verifications — also carries the scan queue itself |
+| **Playwright** | Real Chromium page lifecycle, multi-viewport engine, screenshots, CDP resource blocking |
 | **Deterministic scanner** | Overflow / outside-viewport / navigation / image / layout checks with pixel evidence |
 | **Visual-design checks** | Typography, color, spacing, interaction, performance, UX checks (all 10 categories) |
 | **axe-core** | Accessibility rule pass per viewport |
@@ -272,13 +268,13 @@ Key modules (`scanner/`):
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.12+ · Django 5.2 LTS · Django REST Framework |
-| Data | PostgreSQL · Redis |
-| Async | Celery |
+| Data | PostgreSQL (also carries the scan queue — no Redis needed) |
+| Async | `manage.py scan_worker` DB-polling worker (Celery optional with a broker) |
 | Browser | Playwright · Chromium |
 | Accessibility | axe-core |
 | AI | Gemini API (text-first; screenshots optional) |
 | Frontend | Tailwind CSS · HTMX · Alpine.js · Lucide Icons |
-| Deployment | Render (free tier: web + worker + Redis) · Docker Compose · GitHub Actions |
+| Deployment | Render (free tier: web + worker, no Redis) · Docker Compose · GitHub Actions |
 
 ## Quick start
 
@@ -310,17 +306,20 @@ Visit http://127.0.0.1:8000 — the landing page has a scan form. Paste a **publ
 > cannot be scanned from the web flow. Use live public URLs, or exercise the scanner
 > directly from a shell for local development.
 
-### Celery (background queue)
+### Scan worker (background queue)
 
 By default (`.env` `CELERY_TASK_ALWAYS_EAGER=True`) scans run in-process for development.
-For a real queue (as deployed on Render — web enqueues, a dedicated worker instance
-executes):
+For a real queue (as deployed on Render — web queues scans in Postgres, a dedicated
+worker instance claims and executes them), run the DB-polling worker:
 
 ```bash
-redis-server
-celery -A config.celery worker --concurrency 1 --loglevel=info
-# then set CELERY_TASK_ALWAYS_EAGER=False in .env
+python manage.py scan_worker
+# and set SCAN_WORKER_MODE=True in .env (production defaults to True)
 ```
+
+Celery remains available for setups with a broker: `celery -A config.celery worker
+--concurrency 1 --loglevel=info` with `CELERY_TASK_ALWAYS_EAGER=False` and `REDIS_URL`
+set.
 
 ### Docker
 
@@ -336,7 +335,8 @@ See `.env.example` for the full annotated list. Highlights:
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | — | PostgreSQL DSN |
-| `REDIS_URL` | empty | Redis DSN — Celery broker (required for the web → worker queue) |
+| `REDIS_URL` | empty | Optional — only needed for the Celery queue with a broker |
+| `SCAN_WORKER_MODE` | `True` (prod) / `False` (dev) | Runs scans on the dedicated DB-polling worker instance |
 | `SECRET_KEY` | `change-me-in-production` | Django secret (≥50 chars in prod) |
 | `GEMINI_API_KEY` | empty | Gemini API key (AI analysis is optional) |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Model used for analysis/fixes (recommended: `gemini-3.6-flash`) |
