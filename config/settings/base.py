@@ -29,10 +29,15 @@ SECRET_KEY = env("SECRET_KEY", default="")
 DEBUG = env("DEBUG")
 
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
 if "RENDER_EXTERNAL_HOSTNAME" in os.environ:
     render_host = os.environ["RENDER_EXTERNAL_HOSTNAME"]
     if render_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(render_host)
+    render_url = f"https://{render_host}"
+    if render_url not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(render_url)
 
 # Site identity, used for canonical URLs, Open Graph tags, and the sitemap.
 # Set SITE_URL to the public production domain (e.g. https://aiwebdoctor.onrender.com).

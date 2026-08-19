@@ -8,7 +8,11 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from django.http import HttpResponse
 from apps.accounts.views import landing
+
+def health_check(request):
+    return HttpResponse("OK")
 
 router = DefaultRouter()
 
@@ -21,6 +25,7 @@ urlpatterns = [
     path("", include("apps.scans.urls")),
     path("api/", include(router.urls)),
     path("api/", include("apps.scans.api_urls")),
+    path("health/", health_check, name="health_check"),
 ]
 
 if settings.DEBUG:
