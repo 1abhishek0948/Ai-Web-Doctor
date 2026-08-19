@@ -166,7 +166,7 @@ def _navigate(page: Any, target_url: str, settings: BrowserSettings, max_size: i
     try:
         response = page.goto(
             target_url,
-            wait_until="domcontentloaded",
+            wait_until="load",
             timeout=settings.navigation_timeout_ms,
         )
     except PlaywrightError as exc:
@@ -187,6 +187,8 @@ def _navigate(page: Any, target_url: str, settings: BrowserSettings, max_size: i
         except security.ScanSecurityError as exc:
             raise ScanSecurityError(str(exc)) from exc
 
+    # Short bounded idle wait: most pages settle within a couple of seconds;
+    # never block a viewport for the full budget.
     try:
         page.wait_for_load_state("networkidle", timeout=settings.network_idle_timeout_ms)
     except PlaywrightTimeoutError:
@@ -355,38 +357,26 @@ def scan_site(
     viewport_list = list(viewports or [])
 
     with BrowserSession(browser_settings) as session:
-        first_page = session.page
-        assert first_page is not None
-
         viewport_results: list[ViewportScanResult] = []
         for index, viewport in enumerate(viewport_list):
             if index == 0:
-                page = first_page
-                session.settings = BrowserSettings(**{**browser_settings.__dict__, "viewport": viewport})
-                viewport_results.append(
-                    _scan_page(
-                        page,
-                        target_url,
-                        viewport,
-                        browser_settings,
-                        storage,
-                        scan_id,
-                        max_response_size,
-                    )
-                )
+                page = session.page
             else:
-                page = session.new_page(viewport)
-                viewport_results.append(
-                    _scan_page(
-                        page,
-                        target_url,
-                        viewport,
-                        browser_settings,
-                        storage,
-                        scan_id,
-                        max_response_size,
-                    )
+                # Resize the shared page instead of opening a new context:
+                # cached resources make later viewports far faster.
+                page = session.set_viewport(viewport)
+            assert page is not None
+            viewport_results.append(
+                _scan_page(
+                    page,
+                    target_url,
+                    viewport,
+                    browser_settings,
+                    storage,
+                    scan_id,
+                    max_response_size,
                 )
+            )
 
     successful = [vp for vp in viewport_results if not vp.error]
     if not successful:

@@ -3,7 +3,10 @@
 The heavy lifting happens in ``scanner.analyzer``; this module bridges the
 scanner to the ORM and decides how scans are executed:
 
-* Production: enqueue a Celery task (Redis broker).
+* Production (subprocess mode): run the scan in a short-lived subprocess so
+  Chromium memory is fully released after each scan and an OOM can never kill
+  the web process.
+* Production (Celery): enqueue a Celery task (Redis broker).
 * Development fallback: run the scan in a background daemon thread so the web
   request is never blocked, even without Redis.
 
@@ -15,6 +18,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import subprocess
+import sys
 import threading
 import time
 from datetime import timedelta
@@ -103,6 +109,9 @@ def _browser_settings() -> BrowserSettings:
         navigation_timeout_ms=settings.SCAN_PAGE_TIMEOUT_MS,
         network_idle_timeout_ms=settings.SCAN_NETWORK_IDLE_TIMEOUT_MS,
         max_redirects=settings.MAX_REDIRECTS,
+        low_memory=settings.CHROMIUM_LOW_MEMORY_MODE,
+        block_heavy_resources=settings.SCAN_BLOCK_HEAVY_RESOURCES,
+        block_images=settings.SCAN_BLOCK_IMAGES,
     )
 
 
@@ -317,9 +326,30 @@ def execute_scan(scan_id: int) -> None:
     )
 
 
+def _dispatch_subprocess(scan: Scan) -> None:
+    """Run the scan in a short-lived subprocess (``python -m scanner.run``).
+
+    The child inherits the web process environment, performs the full scan
+    (Chromium included), writes status to Postgres, and exits — releasing all
+    browser memory. A crash/OOM in the child never affects the web process,
+    which keeps serving the UI and progress polling.
+    """
+    log_event("scan.dispatched", scan_id=scan.pk, mode="subprocess")
+    subprocess.Popen(
+        [sys.executable, "-m", "scanner.run", str(scan.pk)],
+        env=os.environ.copy(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
 def dispatch_scan(scan: Scan) -> None:
-    """Dispatch a scan to Celery, or to a dev fallback thread."""
+    """Dispatch a scan to a subprocess, Celery, or a dev fallback thread."""
     recover_stale_scans()
+    if settings.SCAN_SUBPROCESS_MODE:
+        _dispatch_subprocess(scan)
+        return
     if settings.CELERY_TASK_ALWAYS_EAGER:
         logger.info("Running scan %s in a background thread (dev fallback).", scan.pk)
         log_event("scan.dispatched", scan_id=scan.pk, mode="thread")

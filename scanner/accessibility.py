@@ -55,6 +55,25 @@ async (options) => {
 """
 
 
+def _flatten_selector(target: Any) -> str:
+    """Flatten an axe ``node.target`` into a single CSS selector string.
+
+    axe returns nested lists for framed pages, e.g.
+    ``[["#frame", ".content"], ["#main"]]``; plain pages return a flat list of
+    strings. Leaf strings are joined with spaces; anything else degrades
+    gracefully to ``str(target)``.
+    """
+    if not isinstance(target, list):
+        return str(target or "")
+    parts: list[str] = []
+    for item in target:
+        if isinstance(item, list):
+            parts.extend(str(leaf) for leaf in item if leaf not in (None, ""))
+        elif item not in (None, ""):
+            parts.append(str(item))
+    return " ".join(parts)
+
+
 def _normalize_violation(
     violation: dict[str, Any], viewport_width: int, viewport_height: int
 ) -> dict[str, Any] | None:
@@ -66,7 +85,7 @@ def _normalize_violation(
 
     node = nodes[0]
     target = node.get("target") or []
-    selector = " ".join(target) if isinstance(target, list) else str(target or "")
+    selector = _flatten_selector(target)
     snippet = (node.get("html") or "")[:300]
 
     return {

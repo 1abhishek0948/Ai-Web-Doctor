@@ -98,7 +98,7 @@ class ScreenshotSizeTests(TestCase):
         name = screenshots.save_screenshot(
             storage, b"x" * 100, scan_id=1, viewport_width=320, viewport_height=800, max_bytes=1000
         )
-        self.assertEqual(name, "scans/1/viewport-320x800.png")
+        self.assertEqual(name, "scans/1/viewport-320x800.jpg")
         self.assertEqual(storage.saved, [name])
 
     def test_drops_uncompressible_oversized(self):

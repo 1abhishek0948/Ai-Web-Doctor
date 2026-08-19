@@ -19,7 +19,8 @@ services:
     
     # Render's free tier doesn't support preDeployCommand, so migrations and startup 
     # are run inside the Dockerfile's CMD on startup. Gunicorn is optimized to run 
-    # with 1 worker and 2 threads to fit within the 512MB RAM limit.
+    # with 1 worker and 1 thread; scans run in a short-lived subprocess so Chromium
+    # memory is released after every scan and an OOM never kills the web process.
     
     envVars:
       - key: DATABASE_URL
@@ -43,7 +44,37 @@ services:
         value: "https://ai-web-doctor.onrender.com"
 
       - key: CELERY_TASK_ALWAYS_EAGER
-        value: "True" # Fallback to in-process background thread scanning (avoids Redis)
+        value: "True"
+
+      - key: SCAN_SUBPROCESS_MODE
+        value: "True" # Scans run in a child process: memory freed after each scan
+
+      - key: SCAN_VIEWPORTS
+        value: "[[320,800],[390,844],[768,1024],[1440,900]]" # 4 viewports to fit low-RAM hosts
+
+      - key: MAX_CONCURRENT_SCANS
+        value: "1" # One Chromium at a time on low-RAM instances
+
+      - key: MAX_SCAN_DURATION
+        value: "300" # Slower instance needs a longer budget than 120s
+
+      - key: MAX_SCREENSHOTS
+        value: "8"
+
+      - key: SCAN_NETWORK_IDLE_TIMEOUT_MS
+        value: "2000" # Short bounded idle wait per viewport
+
+      - key: CHROMIUM_LOW_MEMORY_MODE
+        value: "True" # Capped V8 heaps + no background services
+
+      - key: SCAN_BLOCK_HEAVY_RESOURCES
+        value: "True" # Abort fonts/media/trackers during scans
+
+      # Set "True" only on very tight instances (<300MB): also aborts image
+      # requests, shrinking peak RSS to ~270MB at the cost of slightly less
+      # accurate responsive checks. On Render's 512MB free plan keep it off.
+      - key: SCAN_BLOCK_IMAGES
+        value: "False"
 
       - key: TRUST_X_FORWARDED_FOR
         value: "True" # Required behind Render's load balancer proxy for rate limits
@@ -52,4 +83,4 @@ services:
         sync: false # Prompts the user to input their Gemini API key on deployment
 
       - key: GEMINI_MODEL
-        value: "gemini-2.0-flash" # Default recommended model
+        value: "gemini-3.6-flash" # Default recommended model (matches .env.example)

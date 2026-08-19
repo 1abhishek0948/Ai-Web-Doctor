@@ -10,6 +10,13 @@ DEBUG = False
 if not SECRET_KEY:  # noqa: F405
     raise RuntimeError("SECRET_KEY must be set in production.")
 
+# Production-safe scan defaults. These are unconditional: the unsafe base
+# defaults (thread scanning, 2 concurrent Chromiums, 10s idle waits) can never
+# leak into production, even if env vars or a .env file carry stale values.
+SCAN_SUBPROCESS_MODE = True
+MAX_CONCURRENT_SCANS = 1
+SCAN_NETWORK_IDLE_TIMEOUT_MS = 2_000
+
 # Production should use a real mail backend (SMTP) configured via env vars.
 EMAIL_BACKEND = env(
     "EMAIL_BACKEND",
@@ -32,7 +39,9 @@ MIDDLEWARE = ["whitenoise.middleware.WhiteNoiseMiddleware"] + MIDDLEWARE  # noqa
 
 # Basic production hardening. Adjust to match your proxy/load balancer.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
 CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
-SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=3600)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True)
+SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=True)

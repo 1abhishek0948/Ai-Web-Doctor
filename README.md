@@ -306,8 +306,12 @@ See `.env.example` for the full annotated list. Highlights:
 | `MAX_REDIRECTS` | `5` | Redirect budget during navigation |
 | `MAX_RESPONSE_SIZE` | `5242880` | Bytes of response body downloaded |
 | `MAX_SCREENSHOTS` | `16` | Screenshots stored per scan |
-| `MAX_SCREENSHOT_SIZE` | `8388608` | Max PNG bytes (oversized shots are downscaled) |
+| `MAX_SCREENSHOT_SIZE` | `8388608` | Max JPEG bytes (oversized shots are downscaled) |
 | `MAX_AI_REQUEST_SIZE` | `4194304` | Max prompt payload to the AI |
+| `SCAN_NETWORK_IDLE_TIMEOUT_MS` | `2000` | Bounded idle wait per viewport (was 10000) |
+| `CHROMIUM_LOW_MEMORY_MODE` | `True` | Capped V8 heaps + no background services (fits ~200MB hosts) |
+| `SCAN_BLOCK_HEAVY_RESOURCES` | `True` | Abort fonts/media/tracker requests during scans |
+| `SCAN_SUBPROCESS_MODE` | `False` | Run scans in a short-lived subprocess (recommended in production) |
 | `RATE_LIMIT_ANONYMOUS_SCANS_PER_DAY` | `3` | Daily quota per IP (anonymous) |
 | `RATE_LIMIT_AUTHED_SCANS_PER_DAY` | `10` | Daily quota per IP (logged in) |
 | `TRUST_X_FORWARDED_FOR` | `False` | Only `True` behind a trusted reverse proxy |

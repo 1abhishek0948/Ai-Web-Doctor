@@ -6,6 +6,7 @@ Environment-specific overrides live in ``development.py`` and ``production.py``.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -183,10 +184,26 @@ TRUST_X_FORWARDED_FOR = env.bool("TRUST_X_FORWARDED_FOR", default=False)
 # Playwright browser behavior
 PLAYWRIGHT_HEADLESS = env.bool("PLAYWRIGHT_HEADLESS", default=True)
 SCAN_PAGE_TIMEOUT_MS = env.int("SCAN_PAGE_TIMEOUT_MS", default=30_000)
-SCAN_NETWORK_IDLE_TIMEOUT_MS = env.int("SCAN_NETWORK_IDLE_TIMEOUT_MS", default=10_000)
+# Short bounded idle wait: most pages settle in ~2s; never block a viewport
+# for the full budget. This is the single biggest per-viewport time saver.
+SCAN_NETWORK_IDLE_TIMEOUT_MS = env.int("SCAN_NETWORK_IDLE_TIMEOUT_MS", default=2_000)
+# Single-process Chromium with capped V8 heaps: fits ~200MB RAM hosts.
+CHROMIUM_LOW_MEMORY_MODE = env.bool("CHROMIUM_LOW_MEMORY_MODE", default=True)
+# Abort fonts/media/tracker requests during scans (speed + memory). Images,
+# CSS and JS still load so responsive/overflow measurements stay accurate.
+SCAN_BLOCK_HEAVY_RESOURCES = env.bool("SCAN_BLOCK_HEAVY_RESOURCES", default=True)
+# Extreme low-memory mode: also abort image requests. Images drive most of
+# Chromium's transient memory on media-heavy sites; enabling this shrinks peak
+# RSS substantially at the cost of slightly less accurate responsive checks.
+SCAN_BLOCK_IMAGES = env.bool("SCAN_BLOCK_IMAGES", default=False)
+# Run scans in a short-lived subprocess instead of a thread inside the web
+# worker: Chromium memory is fully released after each scan and an OOM can
+# never kill the web process. Falls back to the thread for dev when disabled.
+SCAN_SUBPROCESS_MODE = env.bool("SCAN_SUBPROCESS_MODE", default=False)
 
 # Viewports scanned, covering mobile, tablet and desktop.
-SCAN_VIEWPORTS = [
+# Overridable via SCAN_VIEWPORTS env var as JSON: "[[320,800],[768,1024]]".
+_DEFAULT_VIEWPORTS = [
     (320, 800),
     (375, 812),
     (390, 844),
@@ -197,6 +214,21 @@ SCAN_VIEWPORTS = [
     (1024, 1366),
     (1440, 900),
 ]
+
+
+def _parse_viewports(raw: str) -> list[tuple[int, int]]:
+    pairs = json.loads(raw)
+    viewports = [tuple(pair) for pair in pairs if len(pair) == 2]
+    if not viewports:
+        raise ValueError("SCAN_VIEWPORTS must contain at least one [width, height] pair")
+    return viewports
+
+
+SCAN_VIEWPORTS = (
+    _parse_viewports(env("SCAN_VIEWPORTS"))
+    if env("SCAN_VIEWPORTS", default="")
+    else _DEFAULT_VIEWPORTS
+)
 
 # AI visual analysis (Gemini).
 # Representative viewports always sent to the model; the deterministic scanner
