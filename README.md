@@ -17,10 +17,10 @@ objectively **verifies** whether a fix actually solved the detected problem.
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Django](https://img.shields.io/badge/Django-5.2%20LTS-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Build](https://img.shields.io/github/actions/workflow/status/YOUR_GITHUB_USERNAME/ai_web_doctor/ci.yml?branch=main&logo=github)](https://github.com/YOUR_GITHUB_USERNAME/ai_web_doctor/actions)
+[![Build](https://img.shields.io/github/actions/workflow/status/YOUR_GITHUB_USERNAME/ai_web_doctor/ci.yml?branch=main&logo=github)](https://github.com/1abhishek0948/ai_web_doctor/actions)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 
-> Replace `YOUR_GITHUB_USERNAME` in the Build badge with the real repository owner.
+> Replace `1abhishek0948` in the Build badge with the real repository owner.
 > The build badge is only meaningful after the `ci.yml` workflow runs on GitHub.
 
 ---
@@ -388,4 +388,7 @@ deterministic-first design principle, and make sure `python manage.py test` pass
 
 ## License
 
-[MIT](LICENSE) © YOUR_NAME — replace with the actual copyright holder before publishing.
+[MIT](LICENSE) © 
+Name:Abhishek Thakur
+Email:111abhishek.04367@gmail.com
+Linkedin:https://www.linkedin.com/in/abhishek0948/
