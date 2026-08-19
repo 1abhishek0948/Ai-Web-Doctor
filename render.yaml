@@ -1,6 +1,18 @@
 # ============================================================================
 # Render Blueprint Configuration (render.yaml)
 # Use this to deploy AI Web Doctor to Render's Free Plan with a single click.
+#
+# Free tier memory is 512MB per instance. Chromium needs ~400MB alone, so
+# scans NEVER run on the web instance:
+#
+#   web    — gunicorn (small footprint) — enqueues scans to Redis via Celery
+#   worker — celery worker (own instance) — runs the scan with Chromium, then
+#            exits, releasing all browser memory
+#   redis  — free broker that carries scan jobs from web to worker
+#
+# Without this split, the web process + Chromium exceed 512MB and the kernel
+# OOM-kills the whole container mid-scan ("server restarted or ran out of
+# memory").
 # ============================================================================
 
 databases:
@@ -8,7 +20,14 @@ databases:
     plan: free
     region: oregon # Render databases are deployed in a specific region
 
+redis:
+  - name: ai-web-doctor-redis
+    plan: free
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+
 services:
+  # --- Web: serves the UI/API, dispatches scans to the worker ---------------
   - type: web
     name: ai-web-doctor
     runtime: docker
@@ -16,16 +35,19 @@ services:
     region: oregon
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    
-    # Render's free tier doesn't support preDeployCommand, so migrations and startup 
-    # are run inside the Dockerfile's CMD on startup. Gunicorn is optimized to run 
-    # with 1 worker and 1 thread; scans run in a short-lived subprocess so Chromium
-    # memory is released after every scan and an OOM never kills the web process.
-    
+
+    # Render's free tier doesn't support preDeployCommand, so migrations run
+    # inside the Dockerfile's CMD on startup. Gunicorn is optimized for 1
+    # worker + 1 thread; the web process never launches Chromium.
     envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: ai-web-doctor-db
+          property: connectionString
+
+      - key: REDIS_URL
+        fromRedis:
+          name: ai-web-doctor-redis
           property: connectionString
 
       - key: DEBUG
@@ -44,16 +66,70 @@ services:
         value: "https://ai-web-doctor.onrender.com"
 
       - key: CELERY_TASK_ALWAYS_EAGER
-        value: "True"
+        value: "False" # Enqueue to Redis; the worker instance runs the scan
 
       - key: SCAN_SUBPROCESS_MODE
-        value: "True" # Scans run in a child process: memory freed after each scan
+        value: "False" # Never spawn Chromium here — the worker owns the browser
+
+      - key: MAX_CONCURRENT_SCANS
+        value: "1" # One scan at a time on low-RAM instances
+
+      - key: GEMINI_API_KEY
+        sync: false # Prompts the user to input their Gemini API key on deployment
+
+      - key: GEMINI_MODEL
+        value: "gemini-3.6-flash" # Default recommended model (matches .env.example)
+
+      - key: TRUST_X_FORWARDED_FOR
+        value: "True" # Required behind Render's load balancer proxy for rate limits
+
+  # --- Worker: owns Chromium and executes the scans ---------------------------
+  - type: worker
+    name: ai-web-doctor-worker
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    command: celery -A config.celery worker --concurrency 1 --loglevel=info
+
+    # The worker gets its own 512MB instance: Chromium (the biggest consumer)
+    # runs in-process inside the Celery task, so nothing competes with it.
+    # Concurrency 1 keeps a single browser alive at any moment.
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-web-doctor-db
+          property: connectionString
+
+      - key: REDIS_URL
+        fromRedis:
+          name: ai-web-doctor-redis
+          property: connectionString
+
+      - key: DEBUG
+        value: "False"
+
+      - key: DJANGO_SETTINGS_MODULE
+        value: "config.settings.production"
+
+      - key: SECRET_KEY
+        generateValue: true # Worker never renders sessions, so a distinct value is fine
+
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com,localhost,127.0.0.1"
+
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "False"
+
+      - key: SCAN_SUBPROCESS_MODE
+        value: "False" # In-process scans: one python process hosts Chromium
 
       - key: SCAN_VIEWPORTS
         value: "[[320,800],[390,844],[768,1024],[1440,900]]" # 4 viewports to fit low-RAM hosts
 
       - key: MAX_CONCURRENT_SCANS
-        value: "1" # One Chromium at a time on low-RAM instances
+        value: "1"
 
       - key: MAX_SCAN_DURATION
         value: "300" # Slower instance needs a longer budget than 120s
@@ -63,6 +139,9 @@ services:
 
       - key: MAX_SCREENSHOTS
         value: "8"
+
+      - key: MAX_RESPONSE_SIZE
+        value: "5242880"
 
       - key: SCAN_NETWORK_IDLE_TIMEOUT_MS
         value: "2000" # Short bounded idle wait per viewport
@@ -74,17 +153,12 @@ services:
         value: "True" # Block fonts/media/trackers via CDP during scans
 
       # Images drive most of Chromium's transient memory on media-heavy sites;
-      # blocking them keeps peak RSS comfortably inside Render's 512MB free
-      # plan even for sites like nytimes.com. Slight accuracy cost on
-      # responsive checks only.
+      # blocking them keeps peak RSS comfortably inside the free plan.
       - key: SCAN_BLOCK_IMAGES
         value: "True"
 
-      - key: TRUST_X_FORWARDED_FOR
-        value: "True" # Required behind Render's load balancer proxy for rate limits
-
       - key: GEMINI_API_KEY
-        sync: false # Prompts the user to input their Gemini API key on deployment
+        sync: false # Same key as the web service (prompted on deployment)
 
       - key: GEMINI_MODEL
-        value: "gemini-3.6-flash" # Default recommended model (matches .env.example)
+        value: "gemini-3.6-flash"

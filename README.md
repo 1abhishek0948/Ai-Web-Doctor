@@ -30,9 +30,9 @@ URL
 ↓
 Security Validation (SSRF guard)
 ↓
-Celery (background queue)
+Celery (Redis broker → dedicated worker instance)
 ↓
-Playwright (real Chromium, short-lived subprocess + hard watchdog)
+Playwright (real Chromium, in-process on the worker)
 ↓
 Screenshots + DOM Metrics
 ↓
@@ -83,7 +83,7 @@ This is a working, tested implementation. Be aware of what is and is not finishe
 | SSRF guard / DNS rebinding protection | Implemented |
 | Structured JSON logging | Implemented |
 | Django admin / accounts / results UI | Implemented |
-| Celery background queue | Implemented (dev mode also runs scans in-process) |
+| Celery background queue | Implemented (worker instance runs Chromium; dev mode runs scans in-process) |
 | Production deployment (Render free tier, subprocess + watchdog) | **Live** at [ai-web-doctor.onrender.com](https://ai-web-doctor.onrender.com) |
 | Reports app (downloads / health score reports) | **Planned** (empty placeholder app) |
 | REST API beyond health endpoint | **Planned** (currently only `/api/health/`) |
@@ -95,8 +95,9 @@ This is a working, tested implementation. Be aware of what is and is not finishe
 
 Scans run in a real headless **Chromium** browser driven by **Playwright** — pages are
 loaded, network is allowed to idle, and the page is measured as a real user would see it.
-Not a DOM-only lint. In production each scan runs in a short-lived subprocess guarded by a
-hard watchdog, so a wedged renderer can never take down the web process.
+Not a DOM-only lint. In production, Chromium runs on a dedicated worker instance (see
+[Architecture](#architecture)) so an OOM or wedged renderer can never take down the web
+process.
 
 ### Multi-viewport testing
 
@@ -211,30 +212,27 @@ To run it yourself, follow [Quick start](#quick-start) below.
 ## Architecture
 
 ```
-┌────────────┐   POST /scans/   ┌──────────────────┐   dispatch   ┌─────────────────────────┐
-│  Browser   │ ───────────────► │ Django web layer │ ───────────► │ scan executor           │
-│  (UI)      │                  │ rate limit,      │              │ short-lived subprocess  │
-└────────────┘                  │ concurrency cap  │              │ + hard watchdog         │
-                                └──────────────────┘              │ Playwright 9 viewports  │
-                                                                  │ responsive + axe        │
-                                                                  │ visual-design checks    │
-                                                                  │ screenshots + AI        │
-                                                                  └─────────────────────────┘
-                                      │                                   │
-                                      ▼                                   ▼
-                                 PostgreSQL                       Redis / Celery
-                              (scans, issues,                    (broker for the
-                               verifications)                    background queue)
+┌────────────┐   POST /scans/   ┌──────────────────┐   enqueue    ┌─────────────────────────┐
+│  Browser   │ ───────────────► │ Django web layer │ ───────────► │ Redis (Celery broker)  │
+│  (UI)      │                  │ rate limit,      │              └───────────┬─────────────┘
+└────────────┘                  │ concurrency cap  │                          │ task
+                                └──────────────────┘                          ▼
+                                                                            ┌─────────────────────────┐
+                              PostgreSQL                              ┌────►│ Celery worker instance │
+                           (scans, issues,                              │    │ Playwright 9 viewports │
+                            verifications)  ◄───────────────────────────┘    │ responsive + axe       │
+                                                                              │ visual-design checks   │
+                                                                              │ screenshots + AI       │
+                                                                              └─────────────────────────┘
 ```
 
 ```mermaid
 flowchart TD
     User[User] --> Django[Django Web Layer]
     Django --> PG[(PostgreSQL)]
-    Django --> Redis[(Redis)]
-    Redis --> Celery[Celery Worker]
-    Celery --> Sub[Scan subprocess + watchdog]
-    Sub --> PW[Playwright / Chromium]
+    Django --> Redis[(Redis broker)]
+    Redis --> Worker[Celery Worker instance]
+    Worker --> PW[Playwright / Chromium]
     PW --> Scanner[Deterministic Scanner]
     Scanner --> Responsive[Responsive / layout checks]
     Scanner --> Visual[Visual-design checks]
@@ -247,11 +245,10 @@ flowchart TD
 | Component | Responsibility |
 |---|---|
 | **Browser (UI)** | Landing page with scan form, live progress, results dashboard, issue detail + fix + verify |
-| **Django** | Web layer: auth, rate limiting, concurrency cap, views, API, admin |
+| **Django (web)** | Web layer: auth, rate limiting, concurrency cap, views, API, admin, scan dispatch |
+| **Redis** | Celery broker + result backend (delivers scan jobs web → worker) |
+| **Celery worker** | Dedicated instance that executes scans with Chromium in-process (free-tier memory safety) |
 | **PostgreSQL** | Scans, screenshots metadata, page metrics, issues, verifications |
-| **Redis** | Celery broker + result backend |
-| **Celery** | Background scan execution (in-process eager thread in dev mode) |
-| **Scan subprocess + watchdog** | Production scans run isolated with a hard kill deadline (no wedged renderer survives) |
 | **Playwright** | Real Chromium page lifecycle, 9-viewport engine, screenshots, CDP resource blocking |
 | **Deterministic scanner** | Overflow / outside-viewport / navigation / image / layout checks with pixel evidence |
 | **Visual-design checks** | Typography, color, spacing, interaction, performance, UX checks (all 10 categories) |
@@ -281,7 +278,7 @@ Key modules (`scanner/`):
 | Accessibility | axe-core |
 | AI | Gemini API (text-first; screenshots optional) |
 | Frontend | Tailwind CSS · HTMX · Alpine.js · Lucide Icons |
-| Deployment | Render (free tier) · Docker Compose · GitHub Actions |
+| Deployment | Render (free tier: web + worker + Redis) · Docker Compose · GitHub Actions |
 
 ## Quick start
 
@@ -313,14 +310,15 @@ Visit http://127.0.0.1:8000 — the landing page has a scan form. Paste a **publ
 > cannot be scanned from the web flow. Use live public URLs, or exercise the scanner
 > directly from a shell for local development.
 
-### Celery (optional background queue)
+### Celery (background queue)
 
 By default (`.env` `CELERY_TASK_ALWAYS_EAGER=True`) scans run in-process for development.
-For a real queue:
+For a real queue (as deployed on Render — web enqueues, a dedicated worker instance
+executes):
 
 ```bash
 redis-server
-celery -A config.celery worker --loglevel=info
+celery -A config.celery worker --concurrency 1 --loglevel=info
 # then set CELERY_TASK_ALWAYS_EAGER=False in .env
 ```
 
@@ -338,6 +336,7 @@ See `.env.example` for the full annotated list. Highlights:
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | — | PostgreSQL DSN |
+| `REDIS_URL` | empty | Redis DSN — Celery broker (required for the web → worker queue) |
 | `SECRET_KEY` | `change-me-in-production` | Django secret (≥50 chars in prod) |
 | `GEMINI_API_KEY` | empty | Gemini API key (AI analysis is optional) |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Model used for analysis/fixes (recommended: `gemini-3.6-flash`) |

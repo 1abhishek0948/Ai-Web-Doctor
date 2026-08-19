@@ -366,4 +366,18 @@ def dispatch_scan(scan: Scan) -> None:
 
     logger.info("Dispatching scan %s to Celery.", scan.pk)
     log_event("scan.dispatched", scan_id=scan.pk, mode="celery")
-    run_scan_task.delay(scan.pk)
+    try:
+        run_scan_task.delay(scan.pk)
+    except Exception as exc:  # noqa: BLE001 - a down broker must never 500
+        logger.warning("Could not enqueue scan %s: %s", scan.pk, exc)
+        log_event(
+            "scan.dispatched_failed",
+            level=logging.WARNING,
+            scan_id=scan.pk,
+            mode="celery",
+            reason=str(exc)[:200],
+        )
+        scan.set_failed(
+            "The scan queue is temporarily unavailable. Please try again in a "
+            "few minutes."
+        )
