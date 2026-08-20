@@ -22,7 +22,7 @@ from django.core.files.storage import default_storage
 from pydantic import ValidationError
 
 from apps.ai.image_utils import optimize_screenshot
-from apps.ai.providers import AIProvider, AIProviderError, GeminiProvider
+from apps.ai.providers import AIProvider, AIProviderError, GeminiProvider, OpenRouterProvider
 from apps.ai.prompts import (
     build_fix_prompt,
     build_issue_summary,
@@ -88,7 +88,10 @@ class FixResult:
 
 
 def get_provider() -> AIProvider:
-    """Return the configured AI provider (currently Gemini)."""
+    """Return the configured AI provider based on AI_PROVIDER setting."""
+    provider_name = getattr(settings, "AI_PROVIDER", "gemini").lower()
+    if provider_name == "openrouter":
+        return OpenRouterProvider()
     return GeminiProvider()
 
 

@@ -165,6 +165,20 @@ CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=not bool
 
 # Gemini / AI provider configuration.
 # See the AI settings block below (Part 6) for the full provider configuration.
+AI_PROVIDER = env("AI_PROVIDER", default="gemini")
+
+# Gemini settings
+GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
+GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-3.6-flash")
+GEMINI_TIMEOUT_MS = env.int("GEMINI_TIMEOUT_MS", default=60_000)
+GEMINI_MAX_RETRIES = env.int("GEMINI_MAX_RETRIES", default=2)
+
+# OpenRouter settings
+OPENROUTER_API_KEY = env("OPENROUTER_API_KEY", default="")
+OPENROUTER_MODEL = env("OPENROUTER_MODEL", default="nvidia/nemotron-3-ultra-550b-a55b:free")
+OPENROUTER_TIMEOUT_MS = env.int("OPENROUTER_TIMEOUT_MS", default=120_000)
+OPENROUTER_MAX_RETRIES = env.int("OPENROUTER_MAX_RETRIES", default=2)
+
 # Application limits (used from Part 2 onwards).
 MAX_SCAN_DURATION = env.int("MAX_SCAN_DURATION", default=120)
 MAX_CONCURRENT_SCANS = env.int("MAX_CONCURRENT_SCANS", default=2)
