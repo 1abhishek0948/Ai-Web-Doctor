@@ -38,9 +38,9 @@ class GeminiProvider(AIProvider):
         raw_key = api_key if api_key is not None else getattr(settings, "GEMINI_API_KEY", "")
         self.api_key = raw_key.strip().strip('"\'') if raw_key else ""
 
-        raw_model = model if model is not None else getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash")
-        model_str = raw_model.strip().strip('"\'') if raw_model else "gemini-2.0-flash"
-        self.model = model_str.removeprefix("models/").lstrip("/") if model_str else "gemini-2.0-flash"
+        raw_model = model if model is not None else getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash")
+        model_str = raw_model.strip().strip('"\'') if raw_model else "gemini-3.6-flash"
+        self.model = model_str.removeprefix("models/").lstrip("/") if model_str else "gemini-3.6-flash"
 
         self.timeout_ms = (
             timeout_ms if timeout_ms is not None else getattr(settings, "GEMINI_TIMEOUT_MS", 60_000)
@@ -59,7 +59,13 @@ class GeminiProvider(AIProvider):
             raise AIProviderError("httpx is not installed.")
 
         # Candidate models list starting with primary model
-        fallback_candidates = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+        fallback_candidates = [
+            "gemini-3.6-flash",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-2.0-flash-lite",
+        ]
         models_to_try = [self.model]
         for candidate in fallback_candidates:
             if candidate not in models_to_try:
@@ -130,10 +136,13 @@ class GeminiProvider(AIProvider):
 
                     if response.status_code in (401, 403):
                         if self.api_key.startswith("AIza"):
-                            # Auth rejected explicitly for AIza key, don't try Bearer or other models
                             raise last_error
                         if response.status_code == 401:
                             should_try_next_auth = True
+                        break
+
+                    if response.status_code == 404:
+                        # Model not available or deprecated; try next fallback model
                         break
 
                 if model_idx == 0 and auth_idx == 0:

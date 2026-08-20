@@ -99,10 +99,10 @@ services:
         sync: false # Prompts the user to input their Gemini API key on deployment
 
       - key: GEMINI_MODEL
-        value: "gemini-2.0-flash" # Default recommended model (matches .env.example)
+        value: "gemini-3.6-flash" # Default recommended model (matches .env.example)
 
       - key: GEMINI_TIMEOUT_MS
-        value: "60000" # 60s timeout to prevent AI provider timeout errors
+        value: "45000" # 45s timeout to prevent AI provider timeout errors
 
       - key: AI_MAX_PROMPT_TOKENS
         value: "15000" # Lean prompt cap to accelerate Gemini response time
